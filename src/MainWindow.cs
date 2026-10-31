@@ -64,7 +64,6 @@ namespace FocusPulse
         private Ellipse _headerLiveDot;
         private TextBlock _pinIconText;
         private TextBlock _pauseIconText;
-        private TextBlock _shieldIconText;
 
         // Hero Card (Overview Tab)
         private TextBlock _heroAvatarGlyph;
@@ -149,8 +148,6 @@ namespace FocusPulse
         private TextBlock _settingsActiveOpacityText;
         private Border _togglePinSwitch;
         private Border _togglePinKnob;
-        private Border _toggleShieldSwitch;
-        private Border _toggleShieldKnob;
         private Border _toggleTaskbarSwitch;
         private Border _toggleTaskbarKnob;
 
@@ -187,7 +184,8 @@ namespace FocusPulse
             _activeCategoryFilter = !string.IsNullOrEmpty(_config.AppCategoryFilter) ? _config.AppCategoryFilter : "All";
 
             _engine = new ActivityEngine(_config.IdleTimeoutSeconds, _config.DailyGoalHours, _config.BreakReminderMinutes);
-            _engine.IsPrivacyShield = _config.IsPrivacyShieldActive;
+            _engine.IsPrivacyShield = false;
+            _config.IsPrivacyShieldActive = false;
             _engine.ActiveProjectWorkspace = _config.ActiveProjectWorkspace;
             _engine.PomodoroWorkMinutes = _config.PomodoroWorkMinutes > 0 ? _config.PomodoroWorkMinutes : 25;
             _engine.PomodoroBreakMinutes = _config.PomodoroBreakMinutes > 0 ? _config.PomodoroBreakMinutes : 5;
@@ -230,11 +228,21 @@ namespace FocusPulse
             this.WindowStyle = WindowStyle.None;
             this.AllowsTransparency = true;
             this.Background = Brushes.Transparent;
-            this.ResizeMode = ResizeMode.CanResize;
-            this.MinWidth = 340;
-            this.MinHeight = 520;
-            this.MaxWidth = 1000;
-            this.MaxHeight = 1400;
+            this.ResizeMode = _config.IsMiniMode ? ResizeMode.NoResize : ResizeMode.CanResize;
+            if (_config.IsMiniMode)
+            {
+                this.MinWidth = 0;
+                this.MinHeight = 0;
+                this.MaxWidth = 500;
+                this.MaxHeight = 100;
+            }
+            else
+            {
+                this.MinWidth = 340;
+                this.MinHeight = 520;
+                this.MaxWidth = 1000;
+                this.MaxHeight = 1400;
+            }
             this.ShowInTaskbar = _config.ShowInTaskbar;
             this.FontFamily = new FontFamily("Segoe UI Variable Display, Segoe UI, Inter, -apple-system, sans-serif");
 
@@ -571,15 +579,6 @@ namespace FocusPulse
                 _pauseIconText.Foreground = _engine.IsPaused ? _theme.AmberBadgeText : _theme.TextSecondary;
             });
 
-            Border shieldBtn = CreateMicroIconButton("⛨", "Privacy Shield (Mask Confidential Titles)", out _shieldIconText, delegate
-            {
-                _engine.IsPrivacyShield = !_engine.IsPrivacyShield;
-                _config.IsPrivacyShieldActive = _engine.IsPrivacyShield;
-                _shieldIconText.Foreground = _engine.IsPrivacyShield ? _theme.VioletBadgeText : _theme.TextMuted;
-                UpdatePrivacyToggleUI();
-            });
-            _shieldIconText.Foreground = _engine.IsPrivacyShield ? _theme.VioletBadgeText : _theme.TextMuted;
-
             Border pinBtn = CreateMicroIconButton(this.Topmost ? "📌" : "🪟", this.Topmost ? "Always on Top (Click for Normal Window)" : "Normal Window (Behind active apps)", out _pinIconText, delegate
             {
                 ToggleAlwaysOnTop();
@@ -592,7 +591,6 @@ namespace FocusPulse
             Border closeBtn = CreateMicroIconButton("✕", "Close Application", out dummyClose, delegate { this.Close(); });
 
             actions.Children.Add(pauseBtn);
-            actions.Children.Add(shieldBtn);
             actions.Children.Add(pinBtn);
             actions.Children.Add(modeBtn);
             actions.Children.Add(minBtn);
@@ -665,21 +663,23 @@ namespace FocusPulse
 
             _footerStatusPill = new TextBlock()
             {
-                Text = "⚡ Zero Background Overhead",
+                Text = "🔒 100% Offline & Private",
                 FontSize = 9,
                 Foreground = _theme.TextMuted,
-                VerticalAlignment = VerticalAlignment.Center
+                VerticalAlignment = VerticalAlignment.Center,
+                ToolTip = "All data is stored strictly on your local PC in %LOCALAPPDATA%\\FocusPulse. No telemetry, no accounts, and zero cloud tracking."
             };
             Grid.SetColumn(_footerStatusPill, 0);
             footerGrid.Children.Add(_footerStatusPill);
 
             _footerSyncIndicator = new TextBlock()
             {
-                Text = "Live 1s Engine",
+                Text = "Never Leaves Your PC",
                 FontSize = 9,
                 Foreground = _theme.TextMuted,
                 HorizontalAlignment = HorizontalAlignment.Right,
-                VerticalAlignment = VerticalAlignment.Center
+                VerticalAlignment = VerticalAlignment.Center,
+                ToolTip = "FocusPulse never sends or uploads logs anywhere. Your privacy is 100% guaranteed."
             };
             Grid.SetColumn(_footerSyncIndicator, 2);
             footerGrid.Children.Add(_footerSyncIndicator);
@@ -2727,40 +2727,21 @@ namespace FocusPulse
             StackPanel privStack = new StackPanel();
             privStack.Children.Add(new TextBlock()
             {
-                Text = "PRIVACY & SECURITY SHIELD",
+                Text = "🔒 100% OFFLINE & PRIVATE ARCHITECTURE",
                 FontSize = 8.5,
                 FontWeight = FontWeights.Bold,
-                Foreground = _theme.TextMuted,
-                Margin = new Thickness(0, 0, 0, 6)
+                Foreground = _theme.FocusBadgeText,
+                Margin = new Thickness(0, 0, 0, 4)
             });
 
-            Grid privSwitchRow = new Grid();
-            privSwitchRow.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
-            privSwitchRow.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
-
-            TextBlock privLabel = new TextBlock()
+            privStack.Children.Add(new TextBlock()
             {
-                Text = "Mask window titles to protect client/NDA files",
-                FontSize = 10,
+                Text = "FocusPulse is built on a zero-cloud, 100% local architecture. All activity metrics, window titles, and productivity logs stay strictly on your local PC in %LOCALAPPDATA%\\FocusPulse. No telemetry, no remote servers, and zero data leakage.",
+                FontSize = 9.5,
                 Foreground = _theme.TextSecondary,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            Grid.SetColumn(privLabel, 0);
-            privSwitchRow.Children.Add(privLabel);
-
-            _toggleShieldSwitch = CreateSwitchToggle(_engine.IsPrivacyShield, out _toggleShieldKnob, delegate(bool state)
-            {
-                _engine.IsPrivacyShield = state;
-                _config.IsPrivacyShieldActive = state;
-                if (_shieldIconText != null)
-                {
-                    _shieldIconText.Foreground = state ? _theme.VioletBadgeText : _theme.TextMuted;
-                }
-                SaveConfiguration();
+                TextWrapping = TextWrapping.Wrap,
+                LineHeight = 14
             });
-            Grid.SetColumn(_toggleShieldSwitch, 1);
-            privSwitchRow.Children.Add(_toggleShieldSwitch);
-            privStack.Children.Add(privSwitchRow);
 
             privacyTile.Child = privStack;
             settingsPanel.Children.Add(privacyTile);
@@ -2921,7 +2902,11 @@ namespace FocusPulse
 
         private Grid BuildMiniIslandHUD()
         {
-            Grid grid = new Grid();
+            Grid grid = new Grid()
+            {
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Stretch
+            };
             grid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
             grid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
             grid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
@@ -3226,11 +3211,6 @@ namespace FocusPulse
 
         private void UpdatePrivacyToggleUI()
         {
-            if (_toggleShieldSwitch != null && _toggleShieldKnob != null)
-            {
-                _toggleShieldSwitch.Background = _engine.IsPrivacyShield ? _theme.FocusBadgeText : _theme.SurfaceElevated;
-                _toggleShieldKnob.HorizontalAlignment = _engine.IsPrivacyShield ? HorizontalAlignment.Right : HorizontalAlignment.Left;
-            }
         }
 
         private void SetAlwaysOnTopState(bool topMost)
@@ -3385,12 +3365,16 @@ namespace FocusPulse
             if (_isMiniMode)
             {
                 this.ResizeMode = ResizeMode.NoResize;
-                this.Width = 280;
-                this.Height = 54;
+                this.MinWidth = 0;
+                this.MinHeight = 0;
+                this.MaxWidth = 500;
+                this.MaxHeight = 100;
+                this.Width = 330;
+                this.Height = 68;
                 if (_mainShellBorder != null)
                 {
-                    _mainShellBorder.CornerRadius = new CornerRadius(27);
-                    _mainShellBorder.Padding = new Thickness(12, 6, 12, 6);
+                    _mainShellBorder.CornerRadius = new CornerRadius(24);
+                    _mainShellBorder.Padding = new Thickness(12, 8, 12, 8);
                 }
                 if (_fullDashboardGrid != null) _fullDashboardGrid.Visibility = Visibility.Collapsed;
                 if (_miniIslandGrid != null) _miniIslandGrid.Visibility = Visibility.Visible;
@@ -3398,6 +3382,10 @@ namespace FocusPulse
             else
             {
                 this.ResizeMode = ResizeMode.CanResize;
+                this.MinWidth = 340;
+                this.MinHeight = 520;
+                this.MaxWidth = 1000;
+                this.MaxHeight = 1400;
                 this.Width = (_config.Width >= 340 && _config.Width <= 1000) ? _config.Width : 400;
                 this.Height = (_config.Height >= 520 && _config.Height <= 1400) ? _config.Height : 740;
                 if (_mainShellBorder != null)
@@ -4284,13 +4272,6 @@ namespace FocusPulse
                 {
                     _pauseIconText.Text = _engine.IsPaused ? "▶" : "❚❚";
                 }
-            });
-
-            menu.MenuItems.Add("Privacy Shield (Mask Titles)", delegate
-            {
-                _engine.IsPrivacyShield = !_engine.IsPrivacyShield;
-                _config.IsPrivacyShieldActive = _engine.IsPrivacyShield;
-                UpdatePrivacyToggleUI();
             });
 
             menu.MenuItems.Add("-");

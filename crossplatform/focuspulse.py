@@ -71,7 +71,10 @@ def classify_app(app_name, title=""):
         if key in app_lower:
             return cat
 
-    if any(k in title_lower for k in ["github", "stackoverflow", "gitlab", "pull request", "terminal", "debugger"]):
+    study_keywords = ["tutorial", "course", "lecture", "study", "learn", "how to", "guide", "explained", "walkthrough", "documentation", "docs", "coding", "programming", "developer", "conference", "paper", "research", "academic", "deep learning", "machine learning", "ai", "algorithm", "math", "science", "physics", "history", "university", "mit", "stanford", "harvard", "khan academy", "crash course", "analysis", "benchmark", "leetcode", "interview"]
+    if any(k in title_lower for k in study_keywords):
+        return "Focus"
+    if any(k in title_lower for k in ["github", "stackoverflow", "gitlab", "pull request", "terminal", "debugger", "chatgpt", "claude", "gemini"]):
         return "Engineering"
     if any(k in title_lower for k in ["youtube", "twitch", "reddit", "twitter", "tiktok", "instagram"]):
         return "Distraction"
@@ -810,8 +813,8 @@ HTML_DASHBOARD = """<!DOCTYPE html>
     </div>
 
     <div class="footer">
-      <span>✦ Native Win32 / macOS / Linux</span>
-      <span id="osBadge">Live 1s Engine</span>
+      <span>🔒 100% Offline & Private</span>
+      <span id="osBadge">Never Leaves Your PC</span>
     </div>
   </div>
 

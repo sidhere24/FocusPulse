@@ -641,12 +641,7 @@ namespace FocusPulse
                 }
             }
 
-            // Privacy shield masking
-            if (IsPrivacyShield)
-            {
-                title = "Private Workspace";
-            }
-            else if (string.IsNullOrEmpty(title))
+            if (string.IsNullOrEmpty(title))
             {
                 title = ResolveFriendlyTitle(appExe);
             }
@@ -721,31 +716,58 @@ namespace FocusPulse
                         appExe.IndexOf("ActivityWatch", StringComparison.OrdinalIgnoreCase) < 0 &&
                         appExe.IndexOf("Widget", StringComparison.OrdinalIgnoreCase) < 0)
                     {
-                        double curSec = 0;
-                        if (_summary.AppDurations.TryGetValue(appExe, out curSec))
+                        string trackKey = appExe;
+                        if (IsBrowserProcess(appExe))
                         {
-                            _summary.AppDurations[appExe] = curSec + 1.0;
+                            bool isStudy;
+                            string domain = ExtractBrowserDomainOrPlatform(title, out isStudy);
+                            if (!string.IsNullOrEmpty(domain))
+                            {
+                                trackKey = appExe + ":" + domain;
+                            }
+                        }
+
+                        double curSec = 0;
+                        if (_summary.AppDurations.TryGetValue(trackKey, out curSec))
+                        {
+                            _summary.AppDurations[trackKey] = curSec + 1.0;
                         }
                         else
                         {
-                            _summary.AppDurations[appExe] = 1.0;
+                            _summary.AppDurations[trackKey] = 1.0;
                         }
-                    }
 
-                    // Session Switch Logic
-                    if (!string.Equals(_currentWindow.AppName, appExe, StringComparison.OrdinalIgnoreCase) ||
-                        !string.Equals(_currentWindow.WindowTitle, title, StringComparison.OrdinalIgnoreCase))
-                    {
-                        _summary.WindowSwitches++;
-                        _currentWindow.AppName = appExe;
-                        _currentWindow.FriendlyName = ResolveFriendlyTitle(appExe);
-                        _currentWindow.WindowTitle = title;
-                        _currentWindow.StartTime = DateTime.Now;
-                        _currentWindow.ElapsedSeconds = 1;
+                        // Session Switch Logic
+                        if (!string.Equals(_currentWindow.AppName, trackKey, StringComparison.OrdinalIgnoreCase) ||
+                            !string.Equals(_currentWindow.WindowTitle, title, StringComparison.OrdinalIgnoreCase))
+                        {
+                            _summary.WindowSwitches++;
+                            _currentWindow.AppName = trackKey;
+                            _currentWindow.FriendlyName = ResolveFriendlyTitle(trackKey);
+                            _currentWindow.WindowTitle = title;
+                            _currentWindow.StartTime = DateTime.Now;
+                            _currentWindow.ElapsedSeconds = 1;
+                        }
+                        else
+                        {
+                            _currentWindow.ElapsedSeconds += 1.0;
+                        }
                     }
                     else
                     {
-                        _currentWindow.ElapsedSeconds += 1.0;
+                        if (!string.Equals(_currentWindow.AppName, appExe, StringComparison.OrdinalIgnoreCase) ||
+                            !string.Equals(_currentWindow.WindowTitle, title, StringComparison.OrdinalIgnoreCase))
+                        {
+                            _currentWindow.AppName = appExe;
+                            _currentWindow.FriendlyName = ResolveFriendlyTitle(appExe);
+                            _currentWindow.WindowTitle = title;
+                            _currentWindow.StartTime = DateTime.Now;
+                            _currentWindow.ElapsedSeconds = 1;
+                        }
+                        else
+                        {
+                            _currentWindow.ElapsedSeconds += 1.0;
+                        }
                     }
 
                     // Flow Sprint & Pomodoro Work / Break Interval Transition
@@ -819,10 +841,171 @@ namespace FocusPulse
             }
         }
 
+        public static bool IsBrowserProcess(string exeName)
+        {
+            if (string.IsNullOrEmpty(exeName)) return false;
+            string lower = exeName.ToLower();
+            if (lower.Contains(":")) lower = lower.Split(':')[0];
+            return lower == "chrome.exe" || lower == "msedge.exe" || lower == "firefox.exe" || 
+                   lower == "brave.exe" || lower == "opera.exe" || lower == "vivaldi.exe" || 
+                   lower == "arc.exe" || lower == "waterfox.exe" || lower == "chromium.exe";
+        }
+
+        public static string GetBrowserShortName(string exeName)
+        {
+            if (string.IsNullOrEmpty(exeName)) return "Browser";
+            string lower = exeName.ToLower();
+            if (lower.Contains("chrome")) return "Chrome";
+            if (lower.Contains("edge")) return "Edge";
+            if (lower.Contains("firefox")) return "Firefox";
+            if (lower.Contains("brave")) return "Brave";
+            if (lower.Contains("opera")) return "Opera";
+            if (lower.Contains("vivaldi")) return "Vivaldi";
+            if (lower.Contains("arc")) return "Arc";
+            return "Web";
+        }
+
+        public static string ExtractBrowserDomainOrPlatform(string title, out bool isStudyOrResearch)
+        {
+            isStudyOrResearch = false;
+            if (string.IsNullOrEmpty(title)) return null;
+            string lower = title.ToLower();
+
+            bool hasStudyKeywords = 
+                lower.Contains("tutorial") || lower.Contains("course") || lower.Contains("lecture") ||
+                lower.Contains("study") || lower.Contains("learn") || lower.Contains("how to") ||
+                lower.Contains("guide") || lower.Contains("explained") || lower.Contains("walkthrough") ||
+                lower.Contains("documentation") || lower.Contains("docs") || lower.Contains("coding") ||
+                lower.Contains("programming") || lower.Contains("developer") || lower.Contains("conference") ||
+                lower.Contains("paper") || lower.Contains("research") || lower.Contains("academic") ||
+                lower.Contains("deep learning") || lower.Contains("machine learning") || lower.Contains("ai") ||
+                lower.Contains("algorithm") || lower.Contains("math") || lower.Contains("science") ||
+                lower.Contains("physics") || lower.Contains("history") || lower.Contains("university") ||
+                lower.Contains("mit") || lower.Contains("stanford") || lower.Contains("harvard") ||
+                lower.Contains("khan academy") || lower.Contains("crash course") || lower.Contains("analysis") ||
+                lower.Contains("benchmark") || lower.Contains("leetcode") || lower.Contains("interview") ||
+                lower.Contains("exam") || lower.Contains("prep") || lower.Contains("class") || lower.Contains("syllabus") ||
+                lower.Contains("education") || lower.Contains("curriculum") || lower.Contains("thesis") || lower.Contains("journal");
+
+            if (lower.Contains("youtube"))
+            {
+                isStudyOrResearch = hasStudyKeywords;
+                return hasStudyKeywords ? "YouTube (Study & Research)" : "YouTube";
+            }
+            if (lower.Contains("reddit") || lower.Contains("r/"))
+            {
+                isStudyOrResearch = hasStudyKeywords || lower.Contains("r/programming") || lower.Contains("r/learnprogramming") ||
+                                    lower.Contains("r/csharp") || lower.Contains("r/dotnet") || lower.Contains("r/datascience") ||
+                                    lower.Contains("r/machinelearning") || lower.Contains("r/compsci") || lower.Contains("r/askscience");
+                return isStudyOrResearch ? "Reddit (Research & Tech)" : "Reddit";
+            }
+            if (lower.Contains("twitter") || lower.Contains("x.com") || lower.Contains(" / x") || lower.EndsWith(" / x"))
+            {
+                isStudyOrResearch = hasStudyKeywords;
+                return isStudyOrResearch ? "X / Twitter (Tech & Research)" : "X / Twitter";
+            }
+            if (lower.Contains("linkedin"))
+            {
+                isStudyOrResearch = true;
+                return "LinkedIn";
+            }
+            if (lower.Contains("github"))
+            {
+                isStudyOrResearch = true;
+                return "GitHub";
+            }
+            if (lower.Contains("gitlab"))
+            {
+                isStudyOrResearch = true;
+                return "GitLab";
+            }
+            if (lower.Contains("stackoverflow") || lower.Contains("stack overflow") || lower.Contains("stackexchange") || lower.Contains("superuser"))
+            {
+                isStudyOrResearch = true;
+                return "Stack Overflow";
+            }
+            if (lower.Contains("chatgpt") || lower.Contains("openai"))
+            {
+                isStudyOrResearch = true;
+                return "ChatGPT";
+            }
+            if (lower.Contains("claude"))
+            {
+                isStudyOrResearch = true;
+                return "Claude AI";
+            }
+            if (lower.Contains("gemini") || lower.Contains("aistudio") || lower.Contains("google ai"))
+            {
+                isStudyOrResearch = true;
+                return "Gemini AI";
+            }
+            if (lower.Contains("google docs") || lower.Contains("google sheets") || lower.Contains("google slides") || lower.Contains("google drive"))
+            {
+                isStudyOrResearch = true;
+                return "Google Workspace";
+            }
+            if (lower.Contains("notion"))
+            {
+                isStudyOrResearch = true;
+                return "Notion";
+            }
+            if (lower.Contains("coursera") || lower.Contains("udemy") || lower.Contains("edx") || lower.Contains("khan academy"))
+            {
+                isStudyOrResearch = true;
+                return "Online Courses";
+            }
+            if (lower.Contains("wikipedia"))
+            {
+                isStudyOrResearch = true;
+                return "Wikipedia (Research)";
+            }
+            if (lower.Contains("medium") || lower.Contains("dev.to") || lower.Contains("substack"))
+            {
+                isStudyOrResearch = true;
+                return "Tech Articles";
+            }
+            if (lower.Contains("google search") || lower.Contains("bing") || lower.Contains("duckduckgo"))
+            {
+                isStudyOrResearch = hasStudyKeywords;
+                return "Search Engine";
+            }
+            if (lower.Contains("twitch") || lower.Contains("netflix") || lower.Contains("prime video") || lower.Contains("disney+") || lower.Contains("hulu"))
+            {
+                isStudyOrResearch = false;
+                return "Streaming & Entertainment";
+            }
+
+            if (hasStudyKeywords)
+            {
+                isStudyOrResearch = true;
+                return "Research & Study";
+            }
+
+            return null;
+        }
+
         public static ProductivityClass DetermineProductivity(string appExe, string windowTitle)
         {
             string lowerExe = (appExe ?? "").ToLower();
             string lowerTitle = (windowTitle ?? "").ToLower();
+
+            // Sub-tracked browser site key
+            if (lowerExe.Contains(":"))
+            {
+                string sitePart = lowerExe.Split(':')[1];
+                if (sitePart.Contains("study") || sitePart.Contains("research") || sitePart.Contains("github") ||
+                    sitePart.Contains("stackoverflow") || sitePart.Contains("chatgpt") || sitePart.Contains("claude") ||
+                    sitePart.Contains("gemini") || sitePart.Contains("workspace") || sitePart.Contains("notion") ||
+                    sitePart.Contains("course") || sitePart.Contains("wikipedia") || sitePart.Contains("tech") ||
+                    sitePart.Contains("linkedin"))
+                {
+                    return ProductivityClass.FocusWork;
+                }
+                if (sitePart.Contains("entertainment") || sitePart == "youtube" || sitePart == "reddit" || sitePart.Contains("twitter") || sitePart.Contains("x / twitter"))
+                {
+                    return ProductivityClass.Distraction;
+                }
+            }
 
             // Antigravity & AI Developer Tools
             if (lowerExe.Contains("antigravity") || lowerTitle.Contains("antigravity"))
@@ -837,24 +1020,20 @@ namespace FocusPulse
                 return ProductivityClass.Distraction;
             }
 
-            // Browsers (Context-aware based on active tab title)
-            if (lowerExe == "chrome.exe" || lowerExe == "msedge.exe" || lowerExe == "firefox.exe" || lowerExe == "brave.exe")
+            // Browsers (Context-aware based on active tab title and site)
+            if (IsBrowserProcess(lowerExe))
             {
-                if (lowerTitle.Contains("youtube") || lowerTitle.Contains("reddit") || lowerTitle.Contains("twitter") ||
-                    lowerTitle.Contains("x.com") || lowerTitle.Contains("twitch") || lowerTitle.Contains("tiktok") ||
-                    lowerTitle.Contains("facebook") || lowerTitle.Contains("instagram") || lowerTitle.Contains("netflix"))
-                {
-                    return ProductivityClass.Distraction;
-                }
+                bool isStudyOrResearch;
+                string domain = ExtractBrowserDomainOrPlatform(windowTitle, out isStudyOrResearch);
 
-                if (lowerTitle.Contains("github") || lowerTitle.Contains("stackoverflow") || lowerTitle.Contains("stack overflow") ||
-                    lowerTitle.Contains("docs") || lowerTitle.Contains("chatgpt") || lowerTitle.Contains("claude") ||
-                    lowerTitle.Contains("gemini") || lowerTitle.Contains("azure") || lowerTitle.Contains("aws") ||
-                    lowerTitle.Contains("google cloud") || lowerTitle.Contains("jira") || lowerTitle.Contains("confluence") ||
-                    lowerTitle.Contains("notion") || lowerTitle.Contains("pull request") || lowerTitle.Contains("gitlab") ||
-                    lowerTitle.Contains("antigravity") || lowerTitle.Contains("deepmind"))
+                if (isStudyOrResearch)
                 {
                     return ProductivityClass.FocusWork;
+                }
+
+                if (domain == "Streaming & Entertainment" || domain == "YouTube" || domain == "Reddit" || domain == "X / Twitter")
+                {
+                    return ProductivityClass.Distraction;
                 }
 
                 return ProductivityClass.General;
@@ -917,6 +1096,16 @@ namespace FocusPulse
         public static string ResolveFriendlyTitle(string appExe)
         {
             if (string.IsNullOrEmpty(appExe)) return "Unknown";
+
+            // If it's a sub-tracked browser site e.g. "chrome.exe:YouTube (Study & Research)"
+            if (appExe.Contains(":"))
+            {
+                string[] parts = appExe.Split(new char[] { ':' }, 2);
+                string bName = GetBrowserShortName(parts[0]);
+                string site = parts[1];
+                return site + " (" + bName + ")";
+            }
+
             string friendly;
             if (KnownApplications.TryGetValue(appExe, out friendly))
             {
@@ -947,6 +1136,42 @@ namespace FocusPulse
         public static string ResolveCategory(string appExe)
         {
             if (string.IsNullOrEmpty(appExe)) return "General";
+
+            if (appExe.Contains(":"))
+            {
+                string site = appExe.Split(new char[] { ':' }, 2)[1];
+                if (site.IndexOf("Study", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    site.IndexOf("Research", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    site.IndexOf("Course", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    site.IndexOf("Wikipedia", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return "Research & Study";
+                }
+                if (site.IndexOf("GitHub", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    site.IndexOf("GitLab", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    site.IndexOf("Stack Overflow", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    site.IndexOf("ChatGPT", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    site.IndexOf("Claude", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    site.IndexOf("Gemini", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return "Engineering";
+                }
+                if (site.IndexOf("Google Workspace", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    site.IndexOf("Notion", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    site.IndexOf("LinkedIn", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return "Productivity";
+                }
+                if (site.IndexOf("Entertainment", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    site.Equals("YouTube", StringComparison.OrdinalIgnoreCase) ||
+                    site.Equals("Reddit", StringComparison.OrdinalIgnoreCase) ||
+                    site.IndexOf("Twitter", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return "Entertainment";
+                }
+                return "Browsing";
+            }
+
             string cat;
             if (CategoryCatalog.TryGetValue(appExe, out cat))
             {
@@ -989,7 +1214,11 @@ namespace FocusPulse
                             continue;
                         if (categoryFilter.Equals("Distraction", StringComparison.OrdinalIgnoreCase) && prod != ProductivityClass.Distraction)
                             continue;
-                        if (categoryFilter.Equals("Browsing", StringComparison.OrdinalIgnoreCase) && !cat.Equals("Browsing", StringComparison.OrdinalIgnoreCase))
+                        if (categoryFilter.Equals("Browsing", StringComparison.OrdinalIgnoreCase) && 
+                            !cat.Equals("Browsing", StringComparison.OrdinalIgnoreCase) && 
+                            !cat.Equals("Research & Study", StringComparison.OrdinalIgnoreCase) && 
+                            !cat.Equals("Entertainment", StringComparison.OrdinalIgnoreCase) && 
+                            !kvp.Key.Contains(":"))
                             continue;
                         if (categoryFilter.Equals("Engineering", StringComparison.OrdinalIgnoreCase) && !cat.Equals("Engineering", StringComparison.OrdinalIgnoreCase))
                             continue;

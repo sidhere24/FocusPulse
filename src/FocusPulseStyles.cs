@@ -404,6 +404,13 @@ namespace FocusPulse
             if (string.IsNullOrEmpty(friendlyName)) return "◆";
             string clean = friendlyName.Trim();
             if (clean.IndexOf("Antigravity", StringComparison.OrdinalIgnoreCase) >= 0) return "✦";
+            if (clean.IndexOf("YouTube", StringComparison.OrdinalIgnoreCase) >= 0) return "▶";
+            if (clean.IndexOf("Reddit", StringComparison.OrdinalIgnoreCase) >= 0) return "💬";
+            if (clean.IndexOf("GitHub", StringComparison.OrdinalIgnoreCase) >= 0 || clean.IndexOf("GitLab", StringComparison.OrdinalIgnoreCase) >= 0) return "⚡";
+            if (clean.IndexOf("Stack Overflow", StringComparison.OrdinalIgnoreCase) >= 0) return "💡";
+            if (clean.IndexOf("ChatGPT", StringComparison.OrdinalIgnoreCase) >= 0 || clean.IndexOf("Claude", StringComparison.OrdinalIgnoreCase) >= 0 || clean.IndexOf("Gemini", StringComparison.OrdinalIgnoreCase) >= 0) return "✦";
+            if (clean.IndexOf("Wikipedia", StringComparison.OrdinalIgnoreCase) >= 0 || clean.IndexOf("Study", StringComparison.OrdinalIgnoreCase) >= 0 || clean.IndexOf("Research", StringComparison.OrdinalIgnoreCase) >= 0 || clean.IndexOf("Course", StringComparison.OrdinalIgnoreCase) >= 0) return "📚";
+            if (clean.IndexOf("Google Workspace", StringComparison.OrdinalIgnoreCase) >= 0 || clean.IndexOf("Docs", StringComparison.OrdinalIgnoreCase) >= 0) return "📄";
             if (clean.IndexOf("Visual Studio Code", StringComparison.OrdinalIgnoreCase) >= 0 || clean.IndexOf("Code", StringComparison.OrdinalIgnoreCase) >= 0) return "⌥";
             if (clean.IndexOf("Cursor", StringComparison.OrdinalIgnoreCase) >= 0) return "✦";
             if (clean.IndexOf("Windsurf", StringComparison.OrdinalIgnoreCase) >= 0) return "🏄";
