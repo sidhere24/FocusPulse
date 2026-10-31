@@ -58,6 +58,22 @@ namespace FocusPulse
         public const int ICON_SMALL = 0;
         public const int ICON_BIG = 1;
 
+        public const int WM_NCHITTEST = 0x0084;
+        public const int WM_NCLBUTTONDOWN = 0x00A1;
+        public const int HTCLIENT = 1;
+        public const int HTCAPTION = 2;
+        public const int HTLEFT = 10;
+        public const int HTRIGHT = 11;
+        public const int HTTOP = 12;
+        public const int HTTOPLEFT = 13;
+        public const int HTTOPRIGHT = 14;
+        public const int HTBOTTOM = 15;
+        public const int HTBOTTOMLEFT = 16;
+        public const int HTBOTTOMRIGHT = 17;
+
+        [DllImport("user32.dll")]
+        public static extern bool ReleaseCapture();
+
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         public static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
     }

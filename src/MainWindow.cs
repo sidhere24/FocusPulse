@@ -230,7 +230,7 @@ namespace FocusPulse
             this.WindowStyle = WindowStyle.None;
             this.AllowsTransparency = true;
             this.Background = Brushes.Transparent;
-            this.ResizeMode = ResizeMode.NoResize;
+            this.ResizeMode = ResizeMode.CanResize;
             this.MinWidth = 340;
             this.MinHeight = 520;
             this.MaxWidth = 1000;
@@ -321,6 +321,16 @@ namespace FocusPulse
             {
                 if (e.ButtonState == MouseButtonState.Pressed && e.OriginalSource is DependencyObject)
                 {
+                    if (!_isMiniMode)
+                    {
+                        Point pt = e.GetPosition(this);
+                        const int b = 18;
+                        if (pt.X <= b || pt.X >= this.ActualWidth - b || pt.Y <= b || pt.Y >= this.ActualHeight - b)
+                        {
+                            return; // Allow native non-client sizing to take precedence
+                        }
+                    }
+
                     // Avoid initiating window drag when clicking on textboxes or interactive controls
                     if (!(e.OriginalSource is TextBox))
                     {
@@ -368,6 +378,10 @@ namespace FocusPulse
                 {
                     _config.Width = this.Width;
                     _config.Height = this.Height;
+                    if (_settingsWindowSizeText != null)
+                    {
+                        _settingsWindowSizeText.Text = string.Format("Current Dimensions: {0:F0} × {1:F0} px", this.Width, this.Height);
+                    }
                 }
             };
 
@@ -642,10 +656,11 @@ namespace FocusPulse
             Grid.SetRow(viewport, 2);
             grid.Children.Add(viewport);
 
-            // --- Row 3: Elegant Footer with Live Metrics ---
+            // --- Row 3: Elegant Footer with Live Metrics & Resize Grip ---
             Grid footerGrid = new Grid() { Margin = new Thickness(0, 10, 0, 0) };
             footerGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
             footerGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
+            footerGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
             footerGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
 
             _footerStatusPill = new TextBlock()
@@ -668,6 +683,29 @@ namespace FocusPulse
             };
             Grid.SetColumn(_footerSyncIndicator, 2);
             footerGrid.Children.Add(_footerSyncIndicator);
+
+            TextBlock resizeGrip = new TextBlock()
+            {
+                Text = "◢",
+                FontSize = 11,
+                Foreground = _theme.TextMuted,
+                Cursor = Cursors.SizeNWSE,
+                Margin = new Thickness(8, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Bottom,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                ToolTip = "Drag to resize window"
+            };
+            resizeGrip.MouseEnter += delegate { resizeGrip.Foreground = _theme.TextPrimary; };
+            resizeGrip.MouseLeave += delegate { resizeGrip.Foreground = _theme.TextMuted; };
+            resizeGrip.MouseLeftButtonDown += delegate(object s, MouseButtonEventArgs e)
+            {
+                e.Handled = true;
+                IntPtr hwnd = new WindowInteropHelper(this).Handle;
+                NativeMethods.ReleaseCapture();
+                NativeMethods.SendMessage(hwnd, unchecked((uint)NativeMethods.WM_NCLBUTTONDOWN), (IntPtr)NativeMethods.HTBOTTOMRIGHT, IntPtr.Zero);
+            };
+            Grid.SetColumn(resizeGrip, 3);
+            footerGrid.Children.Add(resizeGrip);
 
             Grid.SetRow(footerGrid, 3);
             grid.Children.Add(footerGrid);
@@ -3359,7 +3397,7 @@ namespace FocusPulse
             }
             else
             {
-                this.ResizeMode = ResizeMode.NoResize;
+                this.ResizeMode = ResizeMode.CanResize;
                 this.Width = (_config.Width >= 340 && _config.Width <= 1000) ? _config.Width : 400;
                 this.Height = (_config.Height >= 520 && _config.Height <= 1400) ? _config.Height : 740;
                 if (_mainShellBorder != null)
@@ -3416,24 +3454,36 @@ namespace FocusPulse
         {
             if (msg == WM_NCHITTEST && !_isMiniMode)
             {
-                int x = (short)(lParam.ToInt32() & 0xFFFF);
-                int y = (short)((lParam.ToInt32() >> 16) & 0xFFFF);
+                int x = unchecked((short)(long)lParam);
+                int y = unchecked((short)((long)lParam >> 16));
 
                 try
                 {
                     Point pt = this.PointFromScreen(new Point(x, y));
                     double w = this.ActualWidth;
                     double h = this.ActualHeight;
-                    int b = 8;
+                    const int b = 18;
+                    const int corner = 28;
 
-                    if (pt.X >= w - b && pt.Y >= h - b) { handled = true; return new IntPtr(HTBOTTOMRIGHT); }
-                    if (pt.X <= b && pt.Y >= h - b) { handled = true; return new IntPtr(HTBOTTOMLEFT); }
-                    if (pt.X >= w - b && pt.Y <= b) { handled = true; return new IntPtr(HTTOPRIGHT); }
-                    if (pt.X <= b && pt.Y <= b) { handled = true; return new IntPtr(HTTOPLEFT); }
-                    if (pt.Y >= h - b) { handled = true; return new IntPtr(HTBOTTOM); }
-                    if (pt.Y <= b) { handled = true; return new IntPtr(HTTOP); }
-                    if (pt.X <= b) { handled = true; return new IntPtr(HTLEFT); }
-                    if (pt.X >= w - b) { handled = true; return new IntPtr(HTRIGHT); }
+                    bool isLeft = pt.X <= b;
+                    bool isRight = pt.X >= w - b;
+                    bool isTop = pt.Y <= b;
+                    bool isBottom = pt.Y >= h - b;
+
+                    bool isCornerLeft = pt.X <= corner;
+                    bool isCornerRight = pt.X >= w - corner;
+                    bool isCornerTop = pt.Y <= corner;
+                    bool isCornerBottom = pt.Y >= h - corner;
+
+                    if (isCornerLeft && isCornerTop) { handled = true; return new IntPtr(HTTOPLEFT); }
+                    if (isCornerRight && isCornerTop) { handled = true; return new IntPtr(HTTOPRIGHT); }
+                    if (isCornerLeft && isCornerBottom) { handled = true; return new IntPtr(HTBOTTOMLEFT); }
+                    if (isCornerRight && isCornerBottom) { handled = true; return new IntPtr(HTBOTTOMRIGHT); }
+
+                    if (isTop) { handled = true; return new IntPtr(HTTOP); }
+                    if (isBottom) { handled = true; return new IntPtr(HTBOTTOM); }
+                    if (isLeft) { handled = true; return new IntPtr(HTLEFT); }
+                    if (isRight) { handled = true; return new IntPtr(HTRIGHT); }
                 }
                 catch { }
             }
