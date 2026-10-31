@@ -511,7 +511,7 @@ namespace FocusPulse
             commandBar.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
             commandBar.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
 
-            // Brand Mark with Glowing Live Pulse Dot
+            // Brand Mark with Glowing Live Pulse Dot & PRO Tag
             StackPanel brandStack = new StackPanel() { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
             
             _headerLiveDot = new Ellipse()
@@ -519,20 +519,31 @@ namespace FocusPulse
                 Width = 7,
                 Height = 7,
                 Fill = _theme.FocusBadgeText,
-                Margin = new Thickness(0, 0, 8, 0),
+                Margin = new Thickness(0, 0, 7, 0),
                 VerticalAlignment = VerticalAlignment.Center
             };
             brandStack.Children.Add(_headerLiveDot);
 
-            TextBlock brandGlyph = new TextBlock()
+            Border brandLogoBorder = new Border()
             {
-                Text = "✦",
-                FontSize = 13,
-                Foreground = _theme.BrandAccent,
-                Margin = new Thickness(0, 0, 5, 0),
+                Width = 24,
+                Height = 24,
+                CornerRadius = new CornerRadius(7),
+                Background = _theme.BrandAccent,
+                Margin = new Thickness(0, 0, 7, 0),
                 VerticalAlignment = VerticalAlignment.Center
             };
-            brandStack.Children.Add(brandGlyph);
+            TextBlock brandGlyph = new TextBlock()
+            {
+                Text = "⚡",
+                FontSize = 12,
+                FontWeight = FontWeights.Bold,
+                Foreground = FocusPulseStyles.Brush("#0F172A"),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            brandLogoBorder.Child = brandGlyph;
+            brandStack.Children.Add(brandLogoBorder);
 
             TextBlock brandLabel = new TextBlock()
             {
@@ -540,9 +551,28 @@ namespace FocusPulse
                 FontSize = 13,
                 FontWeight = FontWeights.Bold,
                 Foreground = _theme.TextPrimary,
-                VerticalAlignment = VerticalAlignment.Center
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 5, 0)
             };
             brandStack.Children.Add(brandLabel);
+
+            Border proBadge = new Border()
+            {
+                Background = _theme.FocusBadgeBg,
+                BorderBrush = _theme.FocusBadgeBorder,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(5),
+                Padding = new Thickness(5, 1, 5, 1),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            proBadge.Child = new TextBlock()
+            {
+                Text = "PRO",
+                FontSize = 7.5,
+                FontWeight = FontWeights.ExtraBold,
+                Foreground = _theme.FocusBadgeText
+            };
+            brandStack.Children.Add(proBadge);
 
             Grid.SetColumn(brandStack, 0);
             commandBar.Children.Add(brandStack);
@@ -560,7 +590,7 @@ namespace FocusPulse
             };
             _statusPillText = new TextBlock()
             {
-                Text = "● ACTIVE",
+                Text = "● ACTIVE FLOW",
                 FontSize = 8.5,
                 FontWeight = FontWeights.Bold,
                 Foreground = _theme.FocusBadgeText
@@ -607,9 +637,9 @@ namespace FocusPulse
                 Background = _theme.SurfaceElevated,
                 BorderBrush = _theme.SubtleBorder,
                 BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(10),
+                CornerRadius = new CornerRadius(11),
                 Padding = new Thickness(3),
-                Margin = new Thickness(0, 10, 0, 12)
+                Margin = new Thickness(0, 9, 0, 11)
             };
             Grid navGrid = new Grid();
             navGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
@@ -617,10 +647,10 @@ namespace FocusPulse
             navGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
             navGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
 
-            _tabBtnOverview = CreateSegmentTab("✦ Overview", true, out _tabTxtOverview, delegate { NavigateToTab(0); });
-            _tabBtnFocus = CreateSegmentTab("⚡ Focus", false, out _tabTxtFocus, delegate { NavigateToTab(1); });
-            _tabBtnTimeline = CreateSegmentTab("⏱ Timeline", false, out _tabTxtTimeline, delegate { NavigateToTab(2); });
-            _tabBtnSettings = CreateSegmentTab("⚙ Settings", false, out _tabTxtSettings, delegate { NavigateToTab(3); });
+            _tabBtnOverview = CreateSegmentTab("📊 Overview", true, out _tabTxtOverview, delegate { NavigateToTab(0); });
+            _tabBtnFocus = CreateSegmentTab("⏱ Flow", false, out _tabTxtFocus, delegate { NavigateToTab(1); });
+            _tabBtnTimeline = CreateSegmentTab("📈 Cadence", false, out _tabTxtTimeline, delegate { NavigateToTab(2); });
+            _tabBtnSettings = CreateSegmentTab("⚙️ Settings", false, out _tabTxtSettings, delegate { NavigateToTab(3); });
 
             Grid.SetColumn(_tabBtnOverview, 0);
             Grid.SetColumn(_tabBtnFocus, 1);
@@ -1381,8 +1411,9 @@ namespace FocusPulse
             _sprintCountdownText = new TextBlock()
             {
                 Text = "25:00",
-                FontSize = 34,
+                FontSize = 44,
                 FontWeight = FontWeights.Bold,
+                FontFamily = new FontFamily("Segoe UI Variable Display, Segoe UI, Consolas, monospace"),
                 Foreground = _theme.TextPrimary,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 Margin = new Thickness(0, 8, 0, 4)
@@ -1481,16 +1512,16 @@ namespace FocusPulse
             // Play / Pause Button
             _pomodoroPlayPauseBtn = new Border()
             {
-                CornerRadius = new CornerRadius(7),
+                CornerRadius = new CornerRadius(10),
                 Background = _theme.BrandAccent,
-                Padding = new Thickness(16, 6, 16, 6),
+                Padding = new Thickness(18, 7, 18, 7),
                 Margin = new Thickness(0, 0, 8, 0),
                 Cursor = Cursors.Hand
             };
             _pomodoroPlayPauseText = new TextBlock()
             {
                 Text = "▶ Start",
-                FontSize = 10.5,
+                FontSize = 11,
                 FontWeight = FontWeights.Bold,
                 Foreground = FocusPulseStyles.Brush("#FFFFFF"),
                 HorizontalAlignment = HorizontalAlignment.Center,
@@ -1510,11 +1541,11 @@ namespace FocusPulse
             // Skip Break Button
             _pomodoroSkipBreakBtn = new Border()
             {
-                CornerRadius = new CornerRadius(7),
+                CornerRadius = new CornerRadius(10),
                 Background = _theme.AmberBadgeBg,
                 BorderBrush = _theme.AmberBadgeText,
                 BorderThickness = new Thickness(1),
-                Padding = new Thickness(12, 6, 12, 6),
+                Padding = new Thickness(14, 7, 14, 7),
                 Margin = new Thickness(0, 0, 8, 0),
                 Cursor = Cursors.Hand,
                 Visibility = Visibility.Collapsed
@@ -3027,24 +3058,26 @@ namespace FocusPulse
                 Background = _theme.SurfaceCard,
                 BorderBrush = _theme.SubtleBorder,
                 BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(9),
-                Padding = new Thickness(9, 7, 9, 7)
+                CornerRadius = new CornerRadius(12),
+                Padding = new Thickness(10, 8, 10, 8)
             };
             StackPanel stack = new StackPanel();
             stack.Children.Add(new TextBlock()
             {
                 Text = label,
-                FontSize = 8,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = _theme.TextMuted
+                FontSize = 8.5,
+                FontWeight = FontWeights.Bold,
+                Foreground = _theme.TextMuted,
+                Margin = new Thickness(0, 0, 0, 2)
             });
             valueRef = new TextBlock()
             {
                 Text = initialValue,
-                FontSize = 13.5,
+                FontSize = 14.5,
                 FontWeight = FontWeights.Bold,
                 Foreground = valueBrush,
-                Margin = new Thickness(0, 2, 0, 0)
+                FontFamily = new FontFamily("Segoe UI Variable Display, Segoe UI, Consolas, monospace"),
+                Margin = new Thickness(0, 1, 0, 0)
             };
             stack.Children.Add(valueRef);
             tile.Child = stack;
@@ -3059,11 +3092,11 @@ namespace FocusPulse
         {
             Border tab = new Border()
             {
-                CornerRadius = new CornerRadius(7),
+                CornerRadius = new CornerRadius(8),
                 Background = isActive ? _theme.SurfaceActiveTab : Brushes.Transparent,
                 BorderBrush = isActive ? _theme.HairlineBorder : Brushes.Transparent,
                 BorderThickness = isActive ? new Thickness(1) : new Thickness(0),
-                Height = 25,
+                Height = 27,
                 Cursor = Cursors.Hand,
                 Margin = new Thickness(1)
             };
@@ -3072,7 +3105,7 @@ namespace FocusPulse
                 Text = label,
                 FontSize = 10,
                 FontWeight = isActive ? FontWeights.Bold : FontWeights.SemiBold,
-                Foreground = isActive ? _theme.TextPrimary : _theme.TextSecondary,
+                Foreground = isActive ? _theme.BrandAccent : _theme.TextSecondary,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
             };
@@ -3106,11 +3139,11 @@ namespace FocusPulse
         {
             Border btn = new Border()
             {
-                CornerRadius = new CornerRadius(6),
+                CornerRadius = new CornerRadius(8),
                 Background = _theme.SurfaceElevated,
                 BorderBrush = _theme.SubtleBorder,
                 BorderThickness = new Thickness(1),
-                Padding = new Thickness(9, 4, 9, 4),
+                Padding = new Thickness(10, 5, 10, 5),
                 Margin = new Thickness(0, 0, 6, 4),
                 Cursor = Cursors.Hand
             };
@@ -3346,10 +3379,15 @@ namespace FocusPulse
             _tabBtnTimeline.BorderBrush = (tabIndex == 2) ? _theme.HairlineBorder : Brushes.Transparent;
             _tabBtnSettings.BorderBrush = (tabIndex == 3) ? _theme.HairlineBorder : Brushes.Transparent;
 
-            _tabTxtOverview.Foreground = (tabIndex == 0) ? _theme.TextPrimary : _theme.TextSecondary;
-            _tabTxtFocus.Foreground = (tabIndex == 1) ? _theme.TextPrimary : _theme.TextSecondary;
-            _tabTxtTimeline.Foreground = (tabIndex == 2) ? _theme.TextPrimary : _theme.TextSecondary;
-            _tabTxtSettings.Foreground = (tabIndex == 3) ? _theme.TextPrimary : _theme.TextSecondary;
+            _tabTxtOverview.Foreground = (tabIndex == 0) ? _theme.BrandAccent : _theme.TextSecondary;
+            _tabTxtFocus.Foreground = (tabIndex == 1) ? _theme.BrandAccent : _theme.TextSecondary;
+            _tabTxtTimeline.Foreground = (tabIndex == 2) ? _theme.BrandAccent : _theme.TextSecondary;
+            _tabTxtSettings.Foreground = (tabIndex == 3) ? _theme.BrandAccent : _theme.TextSecondary;
+
+            _tabTxtOverview.FontWeight = (tabIndex == 0) ? FontWeights.Bold : FontWeights.SemiBold;
+            _tabTxtFocus.FontWeight = (tabIndex == 1) ? FontWeights.Bold : FontWeights.SemiBold;
+            _tabTxtTimeline.FontWeight = (tabIndex == 2) ? FontWeights.Bold : FontWeights.SemiBold;
+            _tabTxtSettings.FontWeight = (tabIndex == 3) ? FontWeights.Bold : FontWeights.SemiBold;
         }
 
         private void ToggleDisplayMode()
@@ -3965,7 +4003,7 @@ namespace FocusPulse
                 Background = _theme.SurfaceCard,
                 BorderBrush = _theme.SubtleBorder,
                 BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(7),
+                CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(8, 5, 8, 5),
                 Margin = new Thickness(0, 0, 0, 3),
                 Cursor = Cursors.Hand
@@ -3973,6 +4011,23 @@ namespace FocusPulse
 
             row.MouseEnter += delegate { row.Background = _theme.SurfaceCardHover; };
             row.MouseLeave += delegate { row.Background = _theme.SurfaceCard; };
+
+            Grid mainGrid = new Grid();
+
+            // Background meter
+            Grid bgGrid = new Grid();
+            double pct = Math.Max(0.5, Math.Min(100.0, rec.PercentOfTotal));
+            bgGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(pct, GridUnitType.Star) });
+            bgGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(Math.Max(0.1, 100.0 - pct), GridUnitType.Star) });
+            Border meterFill = new Border()
+            {
+                Background = FocusPulseStyles.Brush(rec.ColorHex),
+                Opacity = _theme.IsDark ? 0.10 : 0.06,
+                CornerRadius = new CornerRadius(6, 0, 0, 6)
+            };
+            Grid.SetColumn(meterFill, 0);
+            bgGrid.Children.Add(meterFill);
+            mainGrid.Children.Add(bgGrid);
 
             Grid grid = new Grid();
             grid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(20) }); // Rank
@@ -4077,7 +4132,8 @@ namespace FocusPulse
             Grid.SetColumn(statsPanel, 3);
             grid.Children.Add(statsPanel);
 
-            row.Child = grid;
+            mainGrid.Children.Add(grid);
+            row.Child = mainGrid;
             return row;
         }
 
@@ -4088,7 +4144,7 @@ namespace FocusPulse
                 Background = _theme.SurfaceCard,
                 BorderBrush = _theme.SubtleBorder,
                 BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(9),
+                CornerRadius = new CornerRadius(10),
                 Padding = new Thickness(9, 7, 9, 7),
                 Margin = new Thickness(0, 0, 0, 5),
                 Cursor = Cursors.Hand
@@ -4098,8 +4154,21 @@ namespace FocusPulse
             card.MouseLeave += delegate { card.Background = _theme.SurfaceCard; };
 
             Grid rowGrid = new Grid();
-            rowGrid.RowDefinitions.Add(new RowDefinition() { Height = GridLength.Auto });
-            rowGrid.RowDefinitions.Add(new RowDefinition() { Height = GridLength.Auto });
+
+            // Integrated background progress fill meter
+            Grid bgGrid = new Grid();
+            double pct = Math.Max(0.5, Math.Min(100.0, rec.PercentOfTotal));
+            bgGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(pct, GridUnitType.Star) });
+            bgGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(Math.Max(0.1, 100.0 - pct), GridUnitType.Star) });
+            Border meterFill = new Border()
+            {
+                Background = FocusPulseStyles.Brush(rec.ColorHex),
+                Opacity = _theme.IsDark ? 0.12 : 0.08,
+                CornerRadius = new CornerRadius(8, 0, 0, 8)
+            };
+            Grid.SetColumn(meterFill, 0);
+            bgGrid.Children.Add(meterFill);
+            rowGrid.Children.Add(bgGrid);
 
             Grid header = new Grid();
             header.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto }); // Rank
@@ -4133,9 +4202,9 @@ namespace FocusPulse
             // Avatar Tile
             Border avatar = new Border()
             {
-                Width = 24,
-                Height = 24,
-                CornerRadius = new CornerRadius(7),
+                Width = 26,
+                Height = 26,
+                CornerRadius = new CornerRadius(8),
                 Background = _theme.SurfaceElevated,
                 BorderBrush = FocusPulseStyles.Brush(rec.ColorHex),
                 BorderThickness = new Thickness(1),
@@ -4145,7 +4214,7 @@ namespace FocusPulse
             TextBlock glyph = new TextBlock()
             {
                 Text = rec.IconGlyph,
-                FontSize = 11,
+                FontSize = 11.5,
                 FontWeight = FontWeights.Bold,
                 Foreground = FocusPulseStyles.Brush(rec.ColorHex),
                 HorizontalAlignment = HorizontalAlignment.Center,
@@ -4159,7 +4228,7 @@ namespace FocusPulse
             TextBlock nameBlock = new TextBlock()
             {
                 Text = rec.FriendlyName,
-                FontSize = 11,
+                FontSize = 11.5,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = _theme.TextPrimary,
                 TextTrimming = TextTrimming.CharacterEllipsis
@@ -4193,15 +4262,16 @@ namespace FocusPulse
             TextBlock timeBlock = new TextBlock()
             {
                 Text = rec.FormattedDuration,
-                FontSize = 11,
+                FontSize = 11.5,
                 FontWeight = FontWeights.Bold,
+                FontFamily = new FontFamily("Segoe UI Variable Display, Consolas, monospace"),
                 Foreground = FocusPulseStyles.Brush(rec.ColorHex),
                 HorizontalAlignment = HorizontalAlignment.Right
             };
             TextBlock pctBlock = new TextBlock()
             {
                 Text = rec.FormattedPercentage,
-                FontSize = 8,
+                FontSize = 8.5,
                 Foreground = _theme.TextMuted,
                 HorizontalAlignment = HorizontalAlignment.Right
             };
@@ -4210,20 +4280,7 @@ namespace FocusPulse
             Grid.SetColumn(statsStack, 3);
             header.Children.Add(statsStack);
 
-            Grid.SetRow(header, 0);
             rowGrid.Children.Add(header);
-
-            ProgressBar bar = new ProgressBar()
-            {
-                Height = 3,
-                Value = rec.PercentOfTotal,
-                Foreground = FocusPulseStyles.Brush(rec.ColorHex),
-                Background = _theme.SurfaceElevated,
-                BorderThickness = new Thickness(0),
-                Margin = new Thickness(0, 6, 0, 0)
-            };
-            Grid.SetRow(bar, 1);
-            rowGrid.Children.Add(bar);
 
             card.Child = rowGrid;
             return card;
