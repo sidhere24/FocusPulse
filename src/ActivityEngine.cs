@@ -137,12 +137,20 @@ namespace FocusPulse
         private WellnessCoach _wellnessCoach;
         private int _idleTimeoutSeconds = 180;
         private readonly string _storageFilePath;
+        private readonly string _tasksFilePath;
+        private readonly string _historyFilePath;
+        private readonly List<FocusTaskItem> _tasks = new List<FocusTaskItem>();
+        private readonly Dictionary<string, double> _dailyHistory = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
 
         public bool IsPaused { get; set; }
         public bool IsPrivacyShield { get; set; }
         public string ActiveProjectWorkspace { get; set; }
         public double DailyGoalHours { get; set; }
         public bool LastTickDistractionWarning { get; private set; }
+        public bool SoundChimesEnabled { get; set; }
+        public int PomodoroWorkMinutes { get; set; }
+        public int PomodoroBreakMinutes { get; set; }
+        public int PomodoroLongBreakMinutes { get; set; }
 
         public ActivityEngine(int idleTimeoutSeconds, double dailyGoalHours = 4.0, int breakMinutes = 50)
         {
@@ -160,6 +168,10 @@ namespace FocusPulse
             ActiveProjectWorkspace = "Development";
             IsPaused = false;
             IsPrivacyShield = false;
+            SoundChimesEnabled = true;
+            PomodoroWorkMinutes = 25;
+            PomodoroBreakMinutes = 5;
+            PomodoroLongBreakMinutes = 15;
 
             _currentWindow = new ActiveWindowSnapshot();
             _flowSprint = new FlowSprintSession();
@@ -173,8 +185,11 @@ namespace FocusPulse
                 Directory.CreateDirectory(dir);
             }
             _storageFilePath = Path.Combine(dir, "day_metrics.json");
+            _tasksFilePath = Path.Combine(dir, "tasks.json");
+            _historyFilePath = Path.Combine(dir, "history.json");
 
             LoadMetrics();
+            LoadTasks();
         }
 
         public DaySummary Summary
@@ -221,24 +236,295 @@ namespace FocusPulse
             }
         }
 
-        public void StartFlowSprint(int minutes, string label)
+        // Task Management
+        public List<FocusTaskItem> Tasks
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return new List<FocusTaskItem>(_tasks);
+                }
+            }
+        }
+
+        public void AddTask(string title, string priority = "Medium")
+        {
+            if (string.IsNullOrWhiteSpace(title)) return;
+            lock (_lock)
+            {
+                FocusTaskItem item = new FocusTaskItem
+                {
+                    Id = Guid.NewGuid().ToString("N").Substring(0, 8),
+                    Title = title.Trim(),
+                    Priority = string.IsNullOrEmpty(priority) ? "Medium" : priority,
+                    IsCompleted = false,
+                    PomodorosCompleted = 0,
+                    CreatedDate = DateTime.Today.ToString("yyyy-MM-dd")
+                };
+                _tasks.Insert(0, item);
+                SaveTasks();
+            }
+        }
+
+        public void ToggleTask(string id)
         {
             lock (_lock)
             {
+                for (int i = 0; i < _tasks.Count; i++)
+                {
+                    if (_tasks[i].Id == id)
+                    {
+                        _tasks[i].IsCompleted = !_tasks[i].IsCompleted;
+                        SaveTasks();
+                        break;
+                    }
+                }
+            }
+        }
+
+        public void DeleteTask(string id)
+        {
+            lock (_lock)
+            {
+                _tasks.RemoveAll(t => t.Id == id);
+                if (_flowSprint.LinkedTaskId == id)
+                {
+                    _flowSprint.LinkedTaskId = "";
+                    _flowSprint.LinkedTaskTitle = "";
+                }
+                SaveTasks();
+            }
+        }
+
+        public void IncrementTaskPomodoro(string id)
+        {
+            lock (_lock)
+            {
+                for (int i = 0; i < _tasks.Count; i++)
+                {
+                    if (_tasks[i].Id == id)
+                    {
+                        _tasks[i].PomodorosCompleted++;
+                        SaveTasks();
+                        break;
+                    }
+                }
+            }
+        }
+
+        public void SetPomodoroTargetTask(string taskId, string taskTitle)
+        {
+            lock (_lock)
+            {
+                _flowSprint.LinkedTaskId = taskId ?? "";
+                _flowSprint.LinkedTaskTitle = taskTitle ?? "";
+            }
+        }
+
+        public void ClearPomodoroTargetTask()
+        {
+            lock (_lock)
+            {
+                _flowSprint.LinkedTaskId = "";
+                _flowSprint.LinkedTaskTitle = "";
+            }
+        }
+
+        // Pomodoro Work / Break Interval Engine
+        public void StartPomodoro(int workMins, int breakMins, int longBreakMins, string taskId = "", string taskTitle = "")
+        {
+            lock (_lock)
+            {
+                PomodoroWorkMinutes = workMins > 0 ? workMins : 25;
+                PomodoroBreakMinutes = breakMins > 0 ? breakMins : 5;
+                PomodoroLongBreakMinutes = longBreakMins > 0 ? longBreakMins : 15;
+
                 _flowSprint.IsActive = true;
-                _flowSprint.TotalDurationSeconds = minutes * 60;
+                _flowSprint.IsPaused = false;
+                _flowSprint.Mode = PomodoroMode.Focus;
+                _flowSprint.TotalDurationSeconds = PomodoroWorkMinutes * 60;
                 _flowSprint.RemainingSeconds = _flowSprint.TotalDurationSeconds;
+                _flowSprint.SprintLabel = string.Format("{0}m Deep Work", PomodoroWorkMinutes);
                 _flowSprint.DistractionWarnings = 0;
+                if (!string.IsNullOrEmpty(taskId))
+                {
+                    _flowSprint.LinkedTaskId = taskId;
+                    _flowSprint.LinkedTaskTitle = taskTitle;
+                }
+            }
+        }
+
+        public void TogglePomodoroPause()
+        {
+            lock (_lock)
+            {
+                if (!_flowSprint.IsActive)
+                {
+                    StartPomodoro(PomodoroWorkMinutes, PomodoroBreakMinutes, PomodoroLongBreakMinutes, _flowSprint.LinkedTaskId, _flowSprint.LinkedTaskTitle);
+                }
+                else
+                {
+                    _flowSprint.IsPaused = !_flowSprint.IsPaused;
+                }
+            }
+        }
+
+        public void SkipPomodoroBreak()
+        {
+            lock (_lock)
+            {
+                if (_flowSprint.Mode == PomodoroMode.ShortBreak)
+                {
+                    _flowSprint.CurrentCycle++;
+                    if (_flowSprint.CurrentCycle > _flowSprint.TargetCycles) _flowSprint.CurrentCycle = 1;
+                }
+                else if (_flowSprint.Mode == PomodoroMode.LongBreak)
+                {
+                    _flowSprint.CurrentCycle = 1;
+                }
+
+                _flowSprint.Mode = PomodoroMode.Focus;
+                _flowSprint.TotalDurationSeconds = PomodoroWorkMinutes * 60;
+                _flowSprint.RemainingSeconds = _flowSprint.TotalDurationSeconds;
+                _flowSprint.SprintLabel = string.Format("{0}m Deep Work", PomodoroWorkMinutes);
+                _flowSprint.IsPaused = false;
+                _flowSprint.IsActive = true;
+            }
+        }
+
+        public void ResetPomodoro()
+        {
+            lock (_lock)
+            {
+                _flowSprint.IsActive = false;
+                _flowSprint.IsPaused = false;
+                _flowSprint.Mode = PomodoroMode.Idle;
+                _flowSprint.TotalDurationSeconds = PomodoroWorkMinutes * 60;
+                _flowSprint.RemainingSeconds = _flowSprint.TotalDurationSeconds;
+                _flowSprint.SprintLabel = string.Format("{0}m Deep Work", PomodoroWorkMinutes);
+                _flowSprint.DistractionWarnings = 0;
+            }
+        }
+
+        public void PlayChime(bool isFocusCompleted)
+        {
+            if (!SoundChimesEnabled) return;
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                try
+                {
+                    if (isFocusCompleted)
+                    {
+                        // Ascending celebratory major chord: C5 (523Hz), E5 (659Hz), G5 (784Hz), C6 (1046Hz)
+                        Console.Beep(523, 100);
+                        Console.Beep(659, 100);
+                        Console.Beep(784, 120);
+                        Console.Beep(1046, 250);
+                    }
+                    else
+                    {
+                        // Gentle dual-tone return to work chime: G5 (784Hz), E5 (659Hz)
+                        Console.Beep(784, 140);
+                        System.Threading.Thread.Sleep(50);
+                        Console.Beep(659, 220);
+                    }
+                }
+                catch
+                {
+                    try { System.Media.SystemSounds.Asterisk.Play(); } catch { }
+                }
+            });
+        }
+
+        // 7-Day Consistency & Streak Engine
+        public List<WeeklyDayMetric> GetWeeklyMetrics(double targetDailyHours)
+        {
+            lock (_lock)
+            {
+                List<WeeklyDayMetric> list = new List<WeeklyDayMetric>();
+                DateTime today = DateTime.Today;
+                double target = targetDailyHours > 0 ? targetDailyHours : 4.0;
+
+                for (int i = 6; i >= 0; i--)
+                {
+                    DateTime day = today.AddDays(-i);
+                    string dateKey = day.ToString("yyyy-MM-dd");
+                    double focusSec = 0;
+
+                    if (dateKey == _summary.Date)
+                    {
+                        focusSec = _summary.FocusWorkSeconds;
+                    }
+                    else if (!_dailyHistory.TryGetValue(dateKey, out focusSec))
+                    {
+                        focusSec = 0;
+                    }
+
+                    WeeklyDayMetric m = new WeeklyDayMetric
+                    {
+                        DayLabel = day.ToString("ddd"),
+                        DateString = dateKey,
+                        FocusHours = focusSec / 3600.0,
+                        IsToday = (i == 0),
+                        TargetHours = target
+                    };
+                    list.Add(m);
+                }
+                return list;
+            }
+        }
+
+        public int GetActiveStreakDays(double minHoursForStreak = 0.5)
+        {
+            lock (_lock)
+            {
+                int streak = 0;
+                DateTime check = DateTime.Today;
+
+                double todaySec = _summary.FocusWorkSeconds;
+                bool todayActive = (todaySec / 3600.0) >= minHoursForStreak;
+                if (todayActive)
+                {
+                    streak++;
+                    check = check.AddDays(-1);
+                }
+                else
+                {
+                    check = check.AddDays(-1);
+                }
+
+                while (true)
+                {
+                    string dateKey = check.ToString("yyyy-MM-dd");
+                    double sec = 0;
+                    if (_dailyHistory.TryGetValue(dateKey, out sec) && (sec / 3600.0) >= minHoursForStreak)
+                    {
+                        streak++;
+                        check = check.AddDays(-1);
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+
+                return (streak > 0) ? streak : (todaySec > 300 ? 1 : 0);
+            }
+        }
+
+        public void StartFlowSprint(int minutes, string label)
+        {
+            StartPomodoro(minutes, PomodoroBreakMinutes, PomodoroLongBreakMinutes, _flowSprint.LinkedTaskId, _flowSprint.LinkedTaskTitle);
+            lock (_lock)
+            {
                 _flowSprint.SprintLabel = label;
             }
         }
 
         public void StopFlowSprint()
         {
-            lock (_lock)
-            {
-                _flowSprint.IsActive = false;
-            }
+            ResetPomodoro();
         }
 
         public void DismissBreakPrompt()
@@ -462,9 +748,9 @@ namespace FocusPulse
                         _currentWindow.ElapsedSeconds += 1.0;
                     }
 
-                    // Flow Sprint Countdown & Distraction Defense
+                    // Flow Sprint & Pomodoro Work / Break Interval Transition
                     LastTickDistractionWarning = false;
-                    if (_flowSprint.IsActive)
+                    if (_flowSprint.IsActive && !_flowSprint.IsPaused)
                     {
                         _flowSprint.RemainingSeconds--;
 
@@ -476,12 +762,57 @@ namespace FocusPulse
 
                         if (_flowSprint.RemainingSeconds <= 0)
                         {
-                            _flowSprint.IsActive = false;
-                            try
+                            if (_flowSprint.Mode == PomodoroMode.Focus)
                             {
-                                System.Media.SystemSounds.Asterisk.Play();
+                                // Focus interval complete: increment task pomodoro counter
+                                if (!string.IsNullOrEmpty(_flowSprint.LinkedTaskId))
+                                {
+                                    IncrementTaskPomodoro(_flowSprint.LinkedTaskId);
+                                }
+                                PlayChime(true);
+
+                                if (_flowSprint.CurrentCycle >= _flowSprint.TargetCycles)
+                                {
+                                    // 4 cycles complete -> Long Break
+                                    _flowSprint.Mode = PomodoroMode.LongBreak;
+                                    _flowSprint.TotalDurationSeconds = PomodoroLongBreakMinutes * 60;
+                                    _flowSprint.RemainingSeconds = _flowSprint.TotalDurationSeconds;
+                                    _flowSprint.SprintLabel = string.Format("🌿 Long Break ({0}m)", PomodoroLongBreakMinutes);
+                                }
+                                else
+                                {
+                                    // Short Break
+                                    _flowSprint.Mode = PomodoroMode.ShortBreak;
+                                    _flowSprint.TotalDurationSeconds = PomodoroBreakMinutes * 60;
+                                    _flowSprint.RemainingSeconds = _flowSprint.TotalDurationSeconds;
+                                    _flowSprint.SprintLabel = string.Format("☕ Short Break ({0}m)", PomodoroBreakMinutes);
+                                }
                             }
-                            catch { }
+                            else if (_flowSprint.Mode == PomodoroMode.ShortBreak)
+                            {
+                                // Short Break complete -> Advance to next Focus cycle
+                                PlayChime(false);
+                                _flowSprint.CurrentCycle++;
+                                _flowSprint.Mode = PomodoroMode.Focus;
+                                _flowSprint.TotalDurationSeconds = PomodoroWorkMinutes * 60;
+                                _flowSprint.RemainingSeconds = _flowSprint.TotalDurationSeconds;
+                                _flowSprint.SprintLabel = string.Format("{0}m Deep Work", PomodoroWorkMinutes);
+                            }
+                            else if (_flowSprint.Mode == PomodoroMode.LongBreak)
+                            {
+                                // Long Break complete -> Reset cycles to 1 and start fresh
+                                PlayChime(false);
+                                _flowSprint.CurrentCycle = 1;
+                                _flowSprint.Mode = PomodoroMode.Focus;
+                                _flowSprint.TotalDurationSeconds = PomodoroWorkMinutes * 60;
+                                _flowSprint.RemainingSeconds = _flowSprint.TotalDurationSeconds;
+                                _flowSprint.SprintLabel = string.Format("{0}m Deep Work", PomodoroWorkMinutes);
+                            }
+                            else
+                            {
+                                _flowSprint.IsActive = false;
+                                PlayChime(true);
+                            }
                         }
                     }
                 }
@@ -727,6 +1058,10 @@ namespace FocusPulse
                     JavaScriptSerializer ser = new JavaScriptSerializer();
                     string json = ser.Serialize(_summary);
                     File.WriteAllText(_storageFilePath, json);
+
+                    _dailyHistory[_summary.Date] = _summary.FocusWorkSeconds;
+                    string histJson = ser.Serialize(_dailyHistory);
+                    File.WriteAllText(_historyFilePath, histJson);
                 }
             }
             catch { }
@@ -746,6 +1081,24 @@ namespace FocusPulse
 
         private void LoadMetrics()
         {
+            try
+            {
+                if (File.Exists(_historyFilePath))
+                {
+                    string histJson = File.ReadAllText(_historyFilePath);
+                    JavaScriptSerializer ser = new JavaScriptSerializer();
+                    Dictionary<string, object> raw = ser.Deserialize<Dictionary<string, object>>(histJson);
+                    if (raw != null)
+                    {
+                        foreach (KeyValuePair<string, object> kvp in raw)
+                        {
+                            _dailyHistory[kvp.Key] = Convert.ToDouble(kvp.Value);
+                        }
+                    }
+                }
+            }
+            catch { }
+
             try
             {
                 if (File.Exists(_storageFilePath))
@@ -794,6 +1147,66 @@ namespace FocusPulse
             catch { }
 
             _summary = new DaySummary();
+        }
+
+        public void LoadTasks()
+        {
+            try
+            {
+                if (File.Exists(_tasksFilePath))
+                {
+                    string json = File.ReadAllText(_tasksFilePath);
+                    JavaScriptSerializer ser = new JavaScriptSerializer();
+                    object[] list = ser.Deserialize<object[]>(json);
+                    if (list != null && list.Length > 0)
+                    {
+                        lock (_lock)
+                        {
+                            _tasks.Clear();
+                            foreach (object obj in list)
+                            {
+                                if (obj is Dictionary<string, object>)
+                                {
+                                    Dictionary<string, object> dict = (Dictionary<string, object>)obj;
+                                    FocusTaskItem t = new FocusTaskItem();
+                                    if (dict.ContainsKey("Id")) t.Id = Convert.ToString(dict["Id"]);
+                                    if (dict.ContainsKey("Title")) t.Title = Convert.ToString(dict["Title"]);
+                                    if (dict.ContainsKey("IsCompleted")) t.IsCompleted = Convert.ToBoolean(dict["IsCompleted"]);
+                                    if (dict.ContainsKey("Priority")) t.Priority = Convert.ToString(dict["Priority"]);
+                                    if (dict.ContainsKey("PomodorosCompleted")) t.PomodorosCompleted = Convert.ToInt32(dict["PomodorosCompleted"]);
+                                    if (dict.ContainsKey("CreatedDate")) t.CreatedDate = Convert.ToString(dict["CreatedDate"]);
+                                    _tasks.Add(t);
+                                }
+                            }
+                        }
+                        return;
+                    }
+                }
+            }
+            catch { }
+
+            lock (_lock)
+            {
+                _tasks.Clear();
+                _tasks.Add(new FocusTaskItem { Title = "Ship FocusPulse v1.1", Priority = "High", PomodorosCompleted = 2 });
+                _tasks.Add(new FocusTaskItem { Title = "Review weekly focus analytics", Priority = "Medium", PomodorosCompleted = 1 });
+                _tasks.Add(new FocusTaskItem { Title = "5-minute hydration and posture stretch", Priority = "Low", IsCompleted = true, PomodorosCompleted = 1 });
+                SaveTasks();
+            }
+        }
+
+        public void SaveTasks()
+        {
+            try
+            {
+                lock (_lock)
+                {
+                    JavaScriptSerializer ser = new JavaScriptSerializer();
+                    string json = ser.Serialize(_tasks);
+                    File.WriteAllText(_tasksFilePath, json);
+                }
+            }
+            catch { }
         }
     }
 }

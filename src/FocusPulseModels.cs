@@ -148,29 +148,87 @@ namespace FocusPulse
         }
     }
 
+    public enum PomodoroMode
+    {
+        Idle,
+        Focus,
+        ShortBreak,
+        LongBreak
+    }
+
+    public class FocusTaskItem
+    {
+        public string Id { get; set; }
+        public string Title { get; set; }
+        public bool IsCompleted { get; set; }
+        public string Priority { get; set; } // "High", "Medium", "Low"
+        public int PomodorosCompleted { get; set; }
+        public string CreatedDate { get; set; }
+
+        public FocusTaskItem()
+        {
+            Id = Guid.NewGuid().ToString("N").Substring(0, 8);
+            Title = "";
+            IsCompleted = false;
+            Priority = "Medium";
+            PomodorosCompleted = 0;
+            CreatedDate = DateTime.Today.ToString("yyyy-MM-dd");
+        }
+    }
+
+    public class WeeklyDayMetric
+    {
+        public string DayLabel { get; set; }
+        public string DateString { get; set; }
+        public double FocusHours { get; set; }
+        public bool IsToday { get; set; }
+        public double TargetHours { get; set; }
+
+        public double Ratio
+        {
+            get
+            {
+                if (TargetHours <= 0) return 0;
+                return Math.Min(1.0, FocusHours / TargetHours);
+            }
+        }
+    }
+
     public class FlowSprintSession
     {
         public bool IsActive { get; set; }
+        public bool IsPaused { get; set; }
+        public PomodoroMode Mode { get; set; }
         public int TotalDurationSeconds { get; set; }
         public int RemainingSeconds { get; set; }
         public int DistractionWarnings { get; set; }
         public string SprintLabel { get; set; }
+        public int CurrentCycle { get; set; }
+        public int TargetCycles { get; set; }
+        public string LinkedTaskId { get; set; }
+        public string LinkedTaskTitle { get; set; }
 
         public FlowSprintSession()
         {
             IsActive = false;
+            IsPaused = false;
+            Mode = PomodoroMode.Idle;
             TotalDurationSeconds = 25 * 60;
             RemainingSeconds = TotalDurationSeconds;
             DistractionWarnings = 0;
-            SprintLabel = "25m Focus Sprint";
+            SprintLabel = "25m Deep Work";
+            CurrentCycle = 1;
+            TargetCycles = 4;
+            LinkedTaskId = "";
+            LinkedTaskTitle = "";
         }
 
         public string FormattedRemaining
         {
             get
             {
-                TimeSpan t = TimeSpan.FromSeconds(RemainingSeconds);
-                return string.Format("{0:D2}:{1:D2}", t.Minutes, t.Seconds);
+                TimeSpan t = TimeSpan.FromSeconds(Math.Max(0, RemainingSeconds));
+                return string.Format("{0:D2}:{1:D2}", (int)t.TotalMinutes, t.Seconds);
             }
         }
 
@@ -263,6 +321,11 @@ namespace FocusPulse
         public string AppCategoryFilter { get; set; }
         public bool IsCompactAppsView { get; set; }
         public string AppSortOrder { get; set; }
+        public List<FocusTaskItem> Tasks { get; set; }
+        public int PomodoroWorkMinutes { get; set; }
+        public int PomodoroBreakMinutes { get; set; }
+        public int PomodoroLongBreakMinutes { get; set; }
+        public bool SoundChimesEnabled { get; set; }
 
         public PulseConfig()
         {
@@ -285,6 +348,11 @@ namespace FocusPulse
             AppCategoryFilter = "All";
             IsCompactAppsView = false;
             AppSortOrder = "Duration";
+            Tasks = new List<FocusTaskItem>();
+            PomodoroWorkMinutes = 25;
+            PomodoroBreakMinutes = 5;
+            PomodoroLongBreakMinutes = 15;
+            SoundChimesEnabled = true;
         }
     }
 

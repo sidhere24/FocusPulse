@@ -104,7 +104,7 @@ namespace FocusPulse
         private Border _btnSortOrder;
         private TextBlock _txtSortOrder;
 
-        // Focus Tab Controls
+        // Focus & Pomodoro Interval Controls
         private TextBlock _focusScoreValueText;
         private TextBlock _focusScoreStatusText;
         private TextBlock _velocitySwitchText;
@@ -116,9 +116,31 @@ namespace FocusPulse
         private TextBlock _dailyTargetSummaryText;
         private ProgressBar _dailyTargetProgressBar;
 
+        private TextBlock _pomodoroModeBadgeText;
+        private Border _pomodoroModeBadgeBorder;
+        private StackPanel _pomodoroCycleDotsPanel;
+        private TextBlock _pomodoroCycleLabelText;
+        private Border _pomodoroTargetTaskBorder;
+        private TextBlock _pomodoroTargetTaskText;
+        private Border _pomodoroClearTargetBtn;
+        private TextBlock _pomodoroPlayPauseText;
+        private Border _pomodoroPlayPauseBtn;
+        private Border _pomodoroSkipBreakBtn;
+
+        // Today's Priorities (Task Checklist) Controls
+        private TextBox _taskInputBox;
+        private Border _taskPriorityToggleBtn;
+        private TextBlock _taskPriorityToggleText;
+        private string _taskSelectedPriority = "Medium";
+        private TextBlock _tasksSummaryBadgeText;
+        private ProgressBar _tasksSummaryProgressBar;
+        private StackPanel _tasksContainerStack;
+
         // Timeline Tab Controls
         private StackPanel _hourlyMatrixStack;
         private TextBlock _workspaceTagText;
+        private TextBlock _weeklyStreakBadgeText;
+        private Grid _weeklyBarsGrid;
 
         // Settings Tab Controls
         private TextBlock _settingsWindowModeText;
@@ -167,6 +189,10 @@ namespace FocusPulse
             _engine = new ActivityEngine(_config.IdleTimeoutSeconds, _config.DailyGoalHours, _config.BreakReminderMinutes);
             _engine.IsPrivacyShield = _config.IsPrivacyShieldActive;
             _engine.ActiveProjectWorkspace = _config.ActiveProjectWorkspace;
+            _engine.PomodoroWorkMinutes = _config.PomodoroWorkMinutes > 0 ? _config.PomodoroWorkMinutes : 25;
+            _engine.PomodoroBreakMinutes = _config.PomodoroBreakMinutes > 0 ? _config.PomodoroBreakMinutes : 5;
+            _engine.PomodoroLongBreakMinutes = _config.PomodoroLongBreakMinutes > 0 ? _config.PomodoroLongBreakMinutes : 15;
+            _engine.SoundChimesEnabled = _config.SoundChimesEnabled;
 
             _syncClient = new SyncClient(5600, 2000);
 
@@ -1235,13 +1261,443 @@ namespace FocusPulse
 
         private Grid BuildFocusView()
         {
-            Grid grid = new Grid();
-            grid.RowDefinitions.Add(new RowDefinition() { Height = GridLength.Auto }); // Focus Score Card
-            grid.RowDefinitions.Add(new RowDefinition() { Height = GridLength.Auto }); // Flow Sprint Card
-            grid.RowDefinitions.Add(new RowDefinition() { Height = GridLength.Auto }); // Daily Target Card
-            grid.RowDefinitions.Add(new RowDefinition() { Height = GridLength.Auto }); // Wellness Banner
+            Grid root = new Grid();
+            ScrollViewer scroll = new ScrollViewer() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+            Style slimScroll = FocusPulseStyles.CreateSlimScrollBarStyle(_theme);
+            if (slimScroll != null)
+            {
+                scroll.Resources[typeof(ScrollBar)] = slimScroll;
+            }
 
-            // 1. Focus Score Hero
+            StackPanel panel = new StackPanel();
+
+            // ==========================================
+            // 1. Pomodoro Work / Break Interval Hero Card
+            // ==========================================
+            Border pomoHeroCard = new Border()
+            {
+                Background = _theme.SurfaceCard,
+                BorderBrush = _theme.SubtleBorder,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(12),
+                Padding = new Thickness(14),
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            StackPanel pomoStack = new StackPanel();
+
+            // Mode & Cycle Header
+            Grid pomoHeader = new Grid();
+            pomoHeader.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
+            pomoHeader.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
+            pomoHeader.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
+
+            _pomodoroModeBadgeBorder = new Border()
+            {
+                CornerRadius = new CornerRadius(5),
+                Background = _theme.SurfaceElevated,
+                BorderBrush = _theme.SubtleBorder,
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(8, 3, 8, 3),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            _pomodoroModeBadgeText = new TextBlock()
+            {
+                Text = "🎯 READY TO FOCUS",
+                FontSize = 9,
+                FontWeight = FontWeights.Bold,
+                Foreground = _theme.BrandAccent
+            };
+            _pomodoroModeBadgeBorder.Child = _pomodoroModeBadgeText;
+            Grid.SetColumn(_pomodoroModeBadgeBorder, 0);
+            pomoHeader.Children.Add(_pomodoroModeBadgeBorder);
+
+            StackPanel cycleCluster = new StackPanel()
+            {
+                Orientation = Orientation.Horizontal,
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+            _pomodoroCycleDotsPanel = new StackPanel()
+            {
+                Orientation = Orientation.Horizontal,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 8, 0)
+            };
+            cycleCluster.Children.Add(_pomodoroCycleDotsPanel);
+
+            _pomodoroCycleLabelText = new TextBlock()
+            {
+                Text = "Cycle 1 of 4",
+                FontSize = 8.5,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = _theme.TextMuted,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            cycleCluster.Children.Add(_pomodoroCycleLabelText);
+            Grid.SetColumn(cycleCluster, 2);
+            pomoHeader.Children.Add(cycleCluster);
+
+            pomoStack.Children.Add(pomoHeader);
+
+            // Big Digital Countdown
+            _sprintCountdownText = new TextBlock()
+            {
+                Text = "25:00",
+                FontSize = 34,
+                FontWeight = FontWeights.Bold,
+                Foreground = _theme.TextPrimary,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 8, 0, 4)
+            };
+            pomoStack.Children.Add(_sprintCountdownText);
+
+            // Active Target Task Banner
+            _pomodoroTargetTaskBorder = new Border()
+            {
+                Background = _theme.SurfaceElevated,
+                BorderBrush = _theme.SubtleBorder,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(8, 4, 8, 4),
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            Grid targetGrid = new Grid();
+            targetGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
+            targetGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
+
+            _pomodoroTargetTaskText = new TextBlock()
+            {
+                Text = "🎯 No task target linked • Click 🎯 on any task below",
+                FontSize = 9.5,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = _theme.TextMuted,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(_pomodoroTargetTaskText, 0);
+            targetGrid.Children.Add(_pomodoroTargetTaskText);
+
+            _pomodoroClearTargetBtn = new Border()
+            {
+                Width = 16,
+                Height = 16,
+                CornerRadius = new CornerRadius(3),
+                Background = Brushes.Transparent,
+                Cursor = Cursors.Hand,
+                Visibility = Visibility.Collapsed,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            TextBlock clearTb = new TextBlock()
+            {
+                Text = "✕",
+                FontSize = 8.5,
+                FontWeight = FontWeights.Bold,
+                Foreground = _theme.TextMuted,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            _pomodoroClearTargetBtn.Child = clearTb;
+            _pomodoroClearTargetBtn.MouseLeftButtonDown += delegate(object s, MouseButtonEventArgs e)
+            {
+                e.Handled = true;
+                _engine.ClearPomodoroTargetTask();
+                RebuildTasksList();
+                UpdateDisplay();
+            };
+            Grid.SetColumn(_pomodoroClearTargetBtn, 1);
+            targetGrid.Children.Add(_pomodoroClearTargetBtn);
+
+            _pomodoroTargetTaskBorder.Child = targetGrid;
+            pomoStack.Children.Add(_pomodoroTargetTaskBorder);
+
+            // Progress bar
+            _sprintProgressBar = new ProgressBar()
+            {
+                Height = 5,
+                Value = 0,
+                Foreground = _theme.BrandAccent,
+                Background = _theme.SurfaceElevated,
+                BorderThickness = new Thickness(0),
+                Margin = new Thickness(0, 0, 0, 6)
+            };
+            pomoStack.Children.Add(_sprintProgressBar);
+
+            _sprintSubStatusText = new TextBlock()
+            {
+                Text = "Ready for an uninterrupted sprint",
+                FontSize = 9.5,
+                Foreground = _theme.TextMuted,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 0, 0, 10)
+            };
+            pomoStack.Children.Add(_sprintSubStatusText);
+
+            // Primary Control Buttons Row
+            StackPanel pomoControls = new StackPanel()
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 0, 0, 6)
+            };
+
+            // Play / Pause Button
+            _pomodoroPlayPauseBtn = new Border()
+            {
+                CornerRadius = new CornerRadius(7),
+                Background = _theme.BrandAccent,
+                Padding = new Thickness(16, 6, 16, 6),
+                Margin = new Thickness(0, 0, 8, 0),
+                Cursor = Cursors.Hand
+            };
+            _pomodoroPlayPauseText = new TextBlock()
+            {
+                Text = "▶ Start",
+                FontSize = 10.5,
+                FontWeight = FontWeights.Bold,
+                Foreground = FocusPulseStyles.Brush("#FFFFFF"),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            _pomodoroPlayPauseBtn.Child = _pomodoroPlayPauseText;
+            _pomodoroPlayPauseBtn.MouseEnter += delegate { _pomodoroPlayPauseBtn.Background = _theme.BrandAccentHover; };
+            _pomodoroPlayPauseBtn.MouseLeave += delegate { _pomodoroPlayPauseBtn.Background = _theme.BrandAccent; };
+            _pomodoroPlayPauseBtn.MouseLeftButtonDown += delegate(object s, MouseButtonEventArgs e)
+            {
+                e.Handled = true;
+                _engine.TogglePomodoroPause();
+                UpdateDisplay();
+            };
+            pomoControls.Children.Add(_pomodoroPlayPauseBtn);
+
+            // Skip Break Button
+            _pomodoroSkipBreakBtn = new Border()
+            {
+                CornerRadius = new CornerRadius(7),
+                Background = _theme.AmberBadgeBg,
+                BorderBrush = _theme.AmberBadgeText,
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(12, 6, 12, 6),
+                Margin = new Thickness(0, 0, 8, 0),
+                Cursor = Cursors.Hand,
+                Visibility = Visibility.Collapsed
+            };
+            TextBlock skipTb = new TextBlock()
+            {
+                Text = "⏭ Skip Break",
+                FontSize = 10,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = _theme.AmberBadgeText,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            _pomodoroSkipBreakBtn.Child = skipTb;
+            _pomodoroSkipBreakBtn.MouseLeftButtonDown += delegate(object s, MouseButtonEventArgs e)
+            {
+                e.Handled = true;
+                _engine.SkipPomodoroBreak();
+                UpdateDisplay();
+            };
+            pomoControls.Children.Add(_pomodoroSkipBreakBtn);
+
+            // Reset Button
+            Border resetBtn = CreateInteractivePill("↺ Reset", delegate
+            {
+                _engine.ResetPomodoro();
+                UpdateDisplay();
+            });
+            pomoControls.Children.Add(resetBtn);
+
+            pomoStack.Children.Add(pomoControls);
+
+            // Presets row
+            StackPanel presetsRow = new StackPanel()
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 2, 0, 0)
+            };
+            presetsRow.Children.Add(CreateInteractivePill("25m Focus", delegate { _engine.StartPomodoro(25, 5, 15); UpdateDisplay(); }));
+            presetsRow.Children.Add(CreateInteractivePill("50m Deep", delegate { _engine.StartPomodoro(50, 10, 20); UpdateDisplay(); }));
+            presetsRow.Children.Add(CreateInteractivePill("5m Break", delegate { _engine.StartPomodoro(5, 5, 15); UpdateDisplay(); }));
+            presetsRow.Children.Add(CreateInteractivePill("15m Long", delegate { _engine.StartPomodoro(15, 5, 15); UpdateDisplay(); }));
+            pomoStack.Children.Add(presetsRow);
+
+            pomoHeroCard.Child = pomoStack;
+            panel.Children.Add(pomoHeroCard);
+
+            // ==========================================
+            // 2. Today's Priorities & Task Checklist
+            // ==========================================
+            Border tasksCard = new Border()
+            {
+                Background = _theme.SurfaceCard,
+                BorderBrush = _theme.SubtleBorder,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(12),
+                Padding = new Thickness(14),
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            StackPanel tasksStack = new StackPanel();
+
+            // Header
+            Grid tasksHeader = new Grid();
+            tasksHeader.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
+            tasksHeader.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
+
+            TextBlock tasksTitle = new TextBlock()
+            {
+                Text = "TODAY'S PRIORITIES & FOCUS QUEUE",
+                FontSize = 8.5,
+                FontWeight = FontWeights.Bold,
+                Foreground = _theme.TextMuted,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(tasksTitle, 0);
+            tasksHeader.Children.Add(tasksTitle);
+
+            _tasksSummaryBadgeText = new TextBlock()
+            {
+                Text = "0 Tasks",
+                FontSize = 9.5,
+                FontWeight = FontWeights.Bold,
+                Foreground = _theme.BrandAccent,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(_tasksSummaryBadgeText, 1);
+            tasksHeader.Children.Add(_tasksSummaryBadgeText);
+            tasksStack.Children.Add(tasksHeader);
+
+            _tasksSummaryProgressBar = new ProgressBar()
+            {
+                Height = 3,
+                Value = 0,
+                Foreground = _theme.BrandAccent,
+                Background = _theme.SurfaceElevated,
+                BorderThickness = new Thickness(0),
+                Margin = new Thickness(0, 4, 0, 10)
+            };
+            tasksStack.Children.Add(_tasksSummaryProgressBar);
+
+            // Quick Add Task Row
+            Grid quickAddGrid = new Grid() { Margin = new Thickness(0, 0, 0, 8) };
+            quickAddGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
+            quickAddGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
+            quickAddGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
+
+            Border inputBorder = new Border()
+            {
+                Background = _theme.SurfaceElevated,
+                BorderBrush = _theme.SubtleBorder,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(8, 2, 8, 2),
+                Margin = new Thickness(0, 0, 6, 0)
+            };
+            _taskInputBox = new TextBox()
+            {
+                Text = "Add a focus task...",
+                Foreground = _theme.TextMuted,
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                FontSize = 10,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            _taskInputBox.GotFocus += delegate
+            {
+                if (_taskInputBox.Text == "Add a focus task...")
+                {
+                    _taskInputBox.Text = "";
+                    _taskInputBox.Foreground = _theme.TextPrimary;
+                }
+            };
+            _taskInputBox.LostFocus += delegate
+            {
+                if (string.IsNullOrWhiteSpace(_taskInputBox.Text))
+                {
+                    _taskInputBox.Text = "Add a focus task...";
+                    _taskInputBox.Foreground = _theme.TextMuted;
+                }
+            };
+            _taskInputBox.KeyDown += delegate(object s, KeyEventArgs e)
+            {
+                if (e.Key == Key.Enter)
+                {
+                    SubmitNewTask();
+                }
+            };
+            inputBorder.Child = _taskInputBox;
+            Grid.SetColumn(inputBorder, 0);
+            quickAddGrid.Children.Add(inputBorder);
+
+            // Priority toggle button
+            _taskPriorityToggleBtn = new Border()
+            {
+                CornerRadius = new CornerRadius(6),
+                Background = _theme.SurfaceElevated,
+                BorderBrush = _theme.SubtleBorder,
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(8, 4, 8, 4),
+                Margin = new Thickness(0, 0, 6, 0),
+                Cursor = Cursors.Hand,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            _taskPriorityToggleText = new TextBlock()
+            {
+                Text = "🟡 Med",
+                FontSize = 9,
+                FontWeight = FontWeights.Bold,
+                Foreground = _theme.AmberBadgeText
+            };
+            _taskPriorityToggleBtn.Child = _taskPriorityToggleText;
+            _taskPriorityToggleBtn.MouseLeftButtonDown += delegate(object s, MouseButtonEventArgs e)
+            {
+                e.Handled = true;
+                CycleTaskPriority();
+            };
+            Grid.SetColumn(_taskPriorityToggleBtn, 1);
+            quickAddGrid.Children.Add(_taskPriorityToggleBtn);
+
+            // Add Button
+            Border addBtn = new Border()
+            {
+                CornerRadius = new CornerRadius(6),
+                Background = _theme.BrandAccent,
+                Padding = new Thickness(10, 4, 10, 4),
+                Cursor = Cursors.Hand,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            TextBlock addTb = new TextBlock()
+            {
+                Text = "+ Add",
+                FontSize = 9.5,
+                FontWeight = FontWeights.Bold,
+                Foreground = FocusPulseStyles.Brush("#FFFFFF"),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            addBtn.Child = addTb;
+            addBtn.MouseEnter += delegate { addBtn.Background = _theme.BrandAccentHover; };
+            addBtn.MouseLeave += delegate { addBtn.Background = _theme.BrandAccent; };
+            addBtn.MouseLeftButtonDown += delegate(object s, MouseButtonEventArgs e)
+            {
+                e.Handled = true;
+                SubmitNewTask();
+            };
+            Grid.SetColumn(addBtn, 2);
+            quickAddGrid.Children.Add(addBtn);
+
+            tasksStack.Children.Add(quickAddGrid);
+
+            // Tasks List
+            _tasksContainerStack = new StackPanel();
+            tasksStack.Children.Add(_tasksContainerStack);
+
+            tasksCard.Child = tasksStack;
+            panel.Children.Add(tasksCard);
+
+            // ==========================================
+            // 3. Focus Score & Velocity Card
+            // ==========================================
             Border scoreTile = new Border()
             {
                 Background = _theme.SurfaceCard,
@@ -1257,9 +1713,9 @@ namespace FocusPulse
 
             Border scoreBadge = new Border()
             {
-                Width = 56,
-                Height = 56,
-                CornerRadius = new CornerRadius(28),
+                Width = 52,
+                Height = 52,
+                CornerRadius = new CornerRadius(26),
                 Background = _theme.FocusBadgeBg,
                 BorderBrush = _theme.FocusBadgeBorder,
                 BorderThickness = new Thickness(2),
@@ -1268,7 +1724,7 @@ namespace FocusPulse
             _focusScoreValueText = new TextBlock()
             {
                 Text = "95%",
-                FontSize = 16,
+                FontSize = 15,
                 FontWeight = FontWeights.Bold,
                 Foreground = _theme.FocusBadgeText,
                 HorizontalAlignment = HorizontalAlignment.Center,
@@ -1289,7 +1745,7 @@ namespace FocusPulse
             _focusScoreStatusText = new TextBlock()
             {
                 Text = "🏆 Deep Focus Flow",
-                FontSize = 13,
+                FontSize = 12,
                 FontWeight = FontWeights.Bold,
                 Foreground = _theme.TextPrimary,
                 Margin = new Thickness(0, 2, 0, 2)
@@ -1297,7 +1753,7 @@ namespace FocusPulse
             _velocitySwitchText = new TextBlock()
             {
                 Text = "Switching Rate: Calm & Focused",
-                FontSize = 10,
+                FontSize = 9.5,
                 Foreground = _theme.TextSecondary
             };
             scoreInfo.Children.Add(scoreHeader);
@@ -1307,77 +1763,11 @@ namespace FocusPulse
             scoreGrid.Children.Add(scoreInfo);
 
             scoreTile.Child = scoreGrid;
-            Grid.SetRow(scoreTile, 0);
-            grid.Children.Add(scoreTile);
+            panel.Children.Add(scoreTile);
 
-            // 2. Flow Sprint Card
-            Border sprintCard = new Border()
-            {
-                Background = _theme.SurfaceCard,
-                BorderBrush = _theme.SubtleBorder,
-                BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(12),
-                Padding = new Thickness(12),
-                Margin = new Thickness(0, 0, 0, 8)
-            };
-            StackPanel sprintStack = new StackPanel();
-
-            Grid sprintTop = new Grid();
-            sprintTop.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
-            sprintTop.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
-
-            TextBlock sprintTitle = new TextBlock()
-            {
-                Text = "🎯 FLOW SPRINT TIMER",
-                FontSize = 9.5,
-                FontWeight = FontWeights.Bold,
-                Foreground = _theme.DistractBadgeText
-            };
-            Grid.SetColumn(sprintTitle, 0);
-            sprintTop.Children.Add(sprintTitle);
-
-            _sprintCountdownText = new TextBlock()
-            {
-                Text = "25:00",
-                FontSize = 14,
-                FontWeight = FontWeights.Bold,
-                Foreground = _theme.TextPrimary
-            };
-            Grid.SetColumn(_sprintCountdownText, 1);
-            sprintTop.Children.Add(_sprintCountdownText);
-            sprintStack.Children.Add(sprintTop);
-
-            _sprintSubStatusText = new TextBlock()
-            {
-                Text = "Ready for an uninterrupted sprint",
-                FontSize = 10,
-                Foreground = _theme.TextMuted,
-                Margin = new Thickness(0, 2, 0, 6)
-            };
-            sprintStack.Children.Add(_sprintSubStatusText);
-
-            _sprintProgressBar = new ProgressBar()
-            {
-                Height = 4,
-                Value = 0,
-                Foreground = _theme.DistractBadgeText,
-                Background = _theme.SurfaceElevated,
-                BorderThickness = new Thickness(0),
-                Margin = new Thickness(0, 0, 0, 8)
-            };
-            sprintStack.Children.Add(_sprintProgressBar);
-
-            StackPanel sprintActions = new StackPanel() { Orientation = Orientation.Horizontal };
-            sprintActions.Children.Add(CreateInteractivePill("25m Focus", delegate { _engine.StartFlowSprint(25, "25m Focus Sprint"); }));
-            sprintActions.Children.Add(CreateInteractivePill("50m Deep Flow", delegate { _engine.StartFlowSprint(50, "50m Deep Flow"); }));
-            sprintActions.Children.Add(CreateInteractivePill("⏹ Stop", delegate { _engine.StopFlowSprint(); }));
-            sprintStack.Children.Add(sprintActions);
-
-            sprintCard.Child = sprintStack;
-            Grid.SetRow(sprintCard, 1);
-            grid.Children.Add(sprintCard);
-
-            // 3. Daily Target Card
+            // ==========================================
+            // 4. Daily Target Card
+            // ==========================================
             Border targetCard = new Border()
             {
                 Background = _theme.SurfaceCard,
@@ -1395,7 +1785,7 @@ namespace FocusPulse
 
             TextBlock targetTitle = new TextBlock()
             {
-                Text = "DAILY FOCUS TARGET (4h)",
+                Text = "DAILY FOCUS TARGET",
                 FontSize = 8.5,
                 FontWeight = FontWeights.Bold,
                 Foreground = _theme.TextMuted
@@ -1406,7 +1796,7 @@ namespace FocusPulse
             _dailyTargetSummaryText = new TextBlock()
             {
                 Text = "0% (0h / 4h)",
-                FontSize = 10,
+                FontSize = 9.5,
                 FontWeight = FontWeights.Bold,
                 Foreground = _theme.FocusBadgeText
             };
@@ -1425,11 +1815,11 @@ namespace FocusPulse
             };
             targetStack.Children.Add(_dailyTargetProgressBar);
             targetCard.Child = targetStack;
+            panel.Children.Add(targetCard);
 
-            Grid.SetRow(targetCard, 2);
-            grid.Children.Add(targetCard);
-
-            // 4. Ergonomic Wellness Banner
+            // ==========================================
+            // 5. Ergonomic Wellness Banner
+            // ==========================================
             _coachAlertBanner = new Border()
             {
                 Background = _theme.VioletBadgeBg,
@@ -1437,6 +1827,7 @@ namespace FocusPulse
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(10),
                 Padding = new Thickness(10),
+                Margin = new Thickness(0, 0, 0, 8),
                 Visibility = Visibility.Collapsed
             };
             Grid coachGrid = new Grid();
@@ -1445,8 +1836,8 @@ namespace FocusPulse
 
             _coachAlertMessageText = new TextBlock()
             {
-                Text = "🧘 Healthy Pacing: You've been working continuously for 50 mins. Time for a quick stretch!",
-                FontSize = 10,
+                Text = "🧘 Healthy Pacing: Continuous work 50 mins. Time for a quick stretch!",
+                FontSize = 9.5,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = _theme.VioletBadgeText,
                 TextWrapping = TextWrapping.Wrap
@@ -1461,16 +1852,322 @@ namespace FocusPulse
             coachGrid.Children.Add(coachActions);
 
             _coachAlertBanner.Child = coachGrid;
-            Grid.SetRow(_coachAlertBanner, 3);
-            grid.Children.Add(_coachAlertBanner);
+            panel.Children.Add(_coachAlertBanner);
 
-            return grid;
+            scroll.Content = panel;
+            root.Children.Add(scroll);
+
+            RebuildTasksList();
+
+            return root;
+        }
+
+        private void SubmitNewTask()
+        {
+            if (_taskInputBox == null) return;
+            string txt = _taskInputBox.Text != null ? _taskInputBox.Text.Trim() : "";
+            if (string.IsNullOrEmpty(txt) || txt == "Add a focus task...") return;
+
+            _engine.AddTask(txt, _taskSelectedPriority);
+            _taskInputBox.Text = "";
+            RebuildTasksList();
+        }
+
+        private void CycleTaskPriority()
+        {
+            if (_taskSelectedPriority == "High")
+            {
+                _taskSelectedPriority = "Low";
+                if (_taskPriorityToggleText != null)
+                {
+                    _taskPriorityToggleText.Text = "🟢 Low";
+                    _taskPriorityToggleText.Foreground = _theme.FocusBadgeText;
+                }
+            }
+            else if (_taskSelectedPriority == "Low")
+            {
+                _taskSelectedPriority = "Medium";
+                if (_taskPriorityToggleText != null)
+                {
+                    _taskPriorityToggleText.Text = "🟡 Med";
+                    _taskPriorityToggleText.Foreground = _theme.AmberBadgeText;
+                }
+            }
+            else
+            {
+                _taskSelectedPriority = "High";
+                if (_taskPriorityToggleText != null)
+                {
+                    _taskPriorityToggleText.Text = "🔴 High";
+                    _taskPriorityToggleText.Foreground = _theme.DistractBadgeText;
+                }
+            }
+        }
+
+        private void RebuildTasksList()
+        {
+            if (_tasksContainerStack == null) return;
+            _tasksContainerStack.Children.Clear();
+
+            List<FocusTaskItem> tasks = _engine.Tasks;
+            int total = tasks.Count;
+            int completed = 0;
+            for (int i = 0; i < total; i++)
+            {
+                if (tasks[i].IsCompleted) completed++;
+            }
+
+            if (_tasksSummaryBadgeText != null)
+            {
+                if (total == 0)
+                {
+                    _tasksSummaryBadgeText.Text = "0 Tasks";
+                }
+                else
+                {
+                    double pct = (completed / (double)total) * 100.0;
+                    _tasksSummaryBadgeText.Text = string.Format("{0}/{1} Done ({2:F0}%)", completed, total, pct);
+                }
+            }
+
+            if (_tasksSummaryProgressBar != null)
+            {
+                _tasksSummaryProgressBar.Value = (total > 0) ? ((completed / (double)total) * 100.0) : 0;
+            }
+
+            if (total == 0)
+            {
+                Border emptyCard = new Border()
+                {
+                    Background = _theme.SurfaceElevated,
+                    CornerRadius = new CornerRadius(8),
+                    Padding = new Thickness(14),
+                    Margin = new Thickness(0, 4, 0, 4)
+                };
+                TextBlock emptyMsg = new TextBlock()
+                {
+                    Text = "✨ All caught up! Add your next focus priority above.",
+                    FontSize = 9.5,
+                    Foreground = _theme.TextMuted,
+                    HorizontalAlignment = HorizontalAlignment.Center
+                };
+                emptyCard.Child = emptyMsg;
+                _tasksContainerStack.Children.Add(emptyCard);
+                return;
+            }
+
+            string currentLinkedId = _engine.ActiveSprint.LinkedTaskId;
+
+            for (int i = 0; i < total; i++)
+            {
+                FocusTaskItem item = tasks[i];
+                string taskId = item.Id;
+                string taskTitle = item.Title;
+                bool isLinked = !string.IsNullOrEmpty(currentLinkedId) && currentLinkedId == taskId;
+
+                Border row = new Border()
+                {
+                    Background = isLinked ? _theme.SurfaceActiveTab : _theme.SurfaceElevated,
+                    BorderBrush = isLinked ? _theme.BrandAccent : _theme.SubtleBorder,
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(8),
+                    Padding = new Thickness(8, 6, 8, 6),
+                    Margin = new Thickness(0, 0, 0, 5),
+                    Opacity = item.IsCompleted ? 0.6 : 1.0
+                };
+
+                Grid rowGrid = new Grid();
+                rowGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto }); // Checkbox
+                rowGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) }); // Title & Priority
+                rowGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto }); // Pomo badge
+                rowGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto }); // Focus target button
+                rowGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto }); // Delete
+
+                // 1. Checkbox
+                Border chk = new Border()
+                {
+                    Width = 18,
+                    Height = 18,
+                    CornerRadius = new CornerRadius(4),
+                    Background = item.IsCompleted ? _theme.BrandAccent : _theme.CanvasBg,
+                    BorderBrush = item.IsCompleted ? _theme.BrandAccent : _theme.TextMuted,
+                    BorderThickness = new Thickness(1.5),
+                    Margin = new Thickness(0, 0, 8, 0),
+                    Cursor = Cursors.Hand,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                TextBlock chkGlyph = new TextBlock()
+                {
+                    Text = item.IsCompleted ? "✓" : "",
+                    FontSize = 10,
+                    FontWeight = FontWeights.Bold,
+                    Foreground = FocusPulseStyles.Brush("#FFFFFF"),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                chk.Child = chkGlyph;
+                chk.MouseLeftButtonDown += delegate(object s, MouseButtonEventArgs e)
+                {
+                    e.Handled = true;
+                    _engine.ToggleTask(taskId);
+                    RebuildTasksList();
+                };
+                Grid.SetColumn(chk, 0);
+                rowGrid.Children.Add(chk);
+
+                // 2. Title & Priority Pill
+                StackPanel titleStack = new StackPanel() { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+                TextBlock titleTb = new TextBlock()
+                {
+                    Text = item.Title,
+                    FontSize = 10.5,
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = item.IsCompleted ? _theme.TextMuted : _theme.TextPrimary,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    MaxWidth = 135,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                if (item.IsCompleted)
+                {
+                    titleTb.TextDecorations = TextDecorations.Strikethrough;
+                }
+                titleStack.Children.Add(titleTb);
+
+                // Priority Badge
+                string prio = item.Priority ?? "Medium";
+                Border prioPill = new Border()
+                {
+                    CornerRadius = new CornerRadius(3),
+                    Padding = new Thickness(4, 1, 4, 1),
+                    Margin = new Thickness(6, 0, 0, 0),
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                TextBlock prioTb = new TextBlock()
+                {
+                    FontSize = 7.5,
+                    FontWeight = FontWeights.Bold
+                };
+                if (prio.Equals("High", StringComparison.OrdinalIgnoreCase))
+                {
+                    prioPill.Background = _theme.DistractBadgeBg;
+                    prioTb.Text = "HIGH";
+                    prioTb.Foreground = _theme.DistractBadgeText;
+                }
+                else if (prio.Equals("Low", StringComparison.OrdinalIgnoreCase))
+                {
+                    prioPill.Background = _theme.FocusBadgeBg;
+                    prioTb.Text = "LOW";
+                    prioTb.Foreground = _theme.FocusBadgeText;
+                }
+                else
+                {
+                    prioPill.Background = _theme.AmberBadgeBg;
+                    prioTb.Text = "MED";
+                    prioTb.Foreground = _theme.AmberBadgeText;
+                }
+                prioPill.Child = prioTb;
+                titleStack.Children.Add(prioPill);
+                Grid.SetColumn(titleStack, 1);
+                rowGrid.Children.Add(titleStack);
+
+                // 3. Pomodoro count badge
+                Border pomoBadge = new Border()
+                {
+                    Background = _theme.SurfaceCard,
+                    BorderBrush = _theme.SubtleBorder,
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(4),
+                    Padding = new Thickness(4, 2, 4, 2),
+                    Margin = new Thickness(0, 0, 5, 0),
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                TextBlock pomoTb = new TextBlock()
+                {
+                    Text = string.Format("🍅 {0}", item.PomodorosCompleted),
+                    FontSize = 8.5,
+                    FontWeight = FontWeights.Bold,
+                    Foreground = _theme.TextPrimary
+                };
+                pomoBadge.Child = pomoTb;
+                Grid.SetColumn(pomoBadge, 2);
+                rowGrid.Children.Add(pomoBadge);
+
+                // 4. Focus target action button
+                Border targetBtn = new Border()
+                {
+                    CornerRadius = new CornerRadius(4),
+                    Background = isLinked ? _theme.BrandAccent : _theme.SurfaceCard,
+                    BorderBrush = isLinked ? _theme.BrandAccent : _theme.SubtleBorder,
+                    BorderThickness = new Thickness(1),
+                    Padding = new Thickness(6, 2, 6, 2),
+                    Margin = new Thickness(0, 0, 5, 0),
+                    Cursor = Cursors.Hand,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                TextBlock targetTb = new TextBlock()
+                {
+                    Text = isLinked ? "🎯 Active" : "🎯 Focus",
+                    FontSize = 8.5,
+                    FontWeight = FontWeights.Bold,
+                    Foreground = isLinked ? FocusPulseStyles.Brush("#FFFFFF") : _theme.TextSecondary
+                };
+                targetBtn.Child = targetTb;
+                targetBtn.MouseLeftButtonDown += delegate(object s, MouseButtonEventArgs e)
+                {
+                    e.Handled = true;
+                    _engine.SetPomodoroTargetTask(taskId, taskTitle);
+                    if (!_engine.ActiveSprint.IsActive)
+                    {
+                        _engine.StartPomodoro(_config.PomodoroWorkMinutes, _config.PomodoroBreakMinutes, _config.PomodoroLongBreakMinutes, taskId, taskTitle);
+                    }
+                    RebuildTasksList();
+                    UpdateDisplay();
+                };
+                Grid.SetColumn(targetBtn, 3);
+                rowGrid.Children.Add(targetBtn);
+
+                // 5. Delete action button
+                Border delBtn = new Border()
+                {
+                    Width = 18,
+                    Height = 18,
+                    CornerRadius = new CornerRadius(4),
+                    Background = Brushes.Transparent,
+                    Cursor = Cursors.Hand,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                TextBlock delTb = new TextBlock()
+                {
+                    Text = "✕",
+                    FontSize = 9.5,
+                    FontWeight = FontWeights.Bold,
+                    Foreground = _theme.TextMuted,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                delBtn.Child = delTb;
+                delBtn.MouseEnter += delegate { delTb.Foreground = _theme.DistractBadgeText; };
+                delBtn.MouseLeave += delegate { delTb.Foreground = _theme.TextMuted; };
+                delBtn.MouseLeftButtonDown += delegate(object s, MouseButtonEventArgs e)
+                {
+                    e.Handled = true;
+                    _engine.DeleteTask(taskId);
+                    RebuildTasksList();
+                    UpdateDisplay();
+                };
+                Grid.SetColumn(delBtn, 4);
+                rowGrid.Children.Add(delBtn);
+
+                row.Child = rowGrid;
+                _tasksContainerStack.Children.Add(row);
+            }
         }
 
         private Grid BuildTimelineView()
         {
             Grid grid = new Grid();
             grid.RowDefinitions.Add(new RowDefinition() { Height = GridLength.Auto }); // Workspace tag selector
+            grid.RowDefinitions.Add(new RowDefinition() { Height = GridLength.Auto }); // Weekly consistency & streak card
             grid.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(1, GridUnitType.Star) }); // Hourly Matrix
 
             Border workspaceTile = new Border()
@@ -1480,7 +2177,7 @@ namespace FocusPulse
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(10),
                 Padding = new Thickness(10, 8, 10, 8),
-                Margin = new Thickness(0, 0, 0, 10)
+                Margin = new Thickness(0, 0, 0, 8)
             };
             Grid wsGrid = new Grid();
             wsGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
@@ -1517,6 +2214,64 @@ namespace FocusPulse
             Grid.SetRow(workspaceTile, 0);
             grid.Children.Add(workspaceTile);
 
+            // Weekly Consistency & Streak Card
+            Border streakCard = new Border()
+            {
+                Background = _theme.SurfaceCard,
+                BorderBrush = _theme.SubtleBorder,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(12, 10, 12, 10),
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            StackPanel streakStack = new StackPanel();
+
+            Grid streakHeader = new Grid();
+            streakHeader.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
+            streakHeader.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
+
+            TextBlock streakTitle = new TextBlock()
+            {
+                Text = "WEEKLY CONSISTENCY & STREAK",
+                FontSize = 8.5,
+                FontWeight = FontWeights.Bold,
+                Foreground = _theme.TextMuted,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(streakTitle, 0);
+            streakHeader.Children.Add(streakTitle);
+
+            Border streakBadge = new Border()
+            {
+                Background = _theme.AmberBadgeBg,
+                BorderBrush = _theme.AmberBadgeText,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(5),
+                Padding = new Thickness(6, 2, 6, 2)
+            };
+            _weeklyStreakBadgeText = new TextBlock()
+            {
+                Text = "🔥 1 DAY STREAK",
+                FontSize = 9,
+                FontWeight = FontWeights.Bold,
+                Foreground = _theme.AmberBadgeText
+            };
+            streakBadge.Child = _weeklyStreakBadgeText;
+            Grid.SetColumn(streakBadge, 1);
+            streakHeader.Children.Add(streakBadge);
+            streakStack.Children.Add(streakHeader);
+
+            _weeklyBarsGrid = new Grid()
+            {
+                Margin = new Thickness(0, 10, 0, 2)
+            };
+            streakStack.Children.Add(_weeklyBarsGrid);
+
+            streakCard.Child = streakStack;
+            Grid.SetRow(streakCard, 1);
+            grid.Children.Add(streakCard);
+
+            // Chronological Work Matrix
             Border timelineCard = new Border()
             {
                 Background = _theme.SurfaceCard,
@@ -1541,7 +2296,7 @@ namespace FocusPulse
             matrixStack.Children.Add(_hourlyMatrixStack);
 
             timelineCard.Child = matrixStack;
-            Grid.SetRow(timelineCard, 1);
+            Grid.SetRow(timelineCard, 2);
             grid.Children.Add(timelineCard);
 
             return grid;
@@ -2012,7 +2767,78 @@ namespace FocusPulse
             opacityTile.Child = opacityStack;
             settingsPanel.Children.Add(opacityTile);
 
-            // 5. Data Management & Reset
+            // 5. Pomodoro Interval & Acoustic Audio Chimes Card
+            Border pomoSettingsTile = new Border()
+            {
+                Background = _theme.SurfaceCard,
+                BorderBrush = _theme.SubtleBorder,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(12),
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            StackPanel pomoSetStack = new StackPanel();
+            pomoSetStack.Children.Add(new TextBlock()
+            {
+                Text = "POMODORO INTERVALS & ACOUSTIC CHIMES",
+                FontSize = 8.5,
+                FontWeight = FontWeights.Bold,
+                Foreground = _theme.TextMuted,
+                Margin = new Thickness(0, 0, 0, 6)
+            });
+
+            // Focus duration
+            pomoSetStack.Children.Add(new TextBlock()
+            {
+                Text = string.Format("Default Work Interval: {0} minutes", _config.PomodoroWorkMinutes),
+                FontSize = 10,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = _theme.TextPrimary,
+                Margin = new Thickness(0, 0, 0, 4)
+            });
+            StackPanel workPills = new StackPanel() { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
+            workPills.Children.Add(CreateInteractivePill("20m", delegate { _config.PomodoroWorkMinutes = 20; _engine.PomodoroWorkMinutes = 20; SaveConfiguration(); UpdateDisplay(); }));
+            workPills.Children.Add(CreateInteractivePill("25m (Classic)", delegate { _config.PomodoroWorkMinutes = 25; _engine.PomodoroWorkMinutes = 25; SaveConfiguration(); UpdateDisplay(); }));
+            workPills.Children.Add(CreateInteractivePill("45m", delegate { _config.PomodoroWorkMinutes = 45; _engine.PomodoroWorkMinutes = 45; SaveConfiguration(); UpdateDisplay(); }));
+            workPills.Children.Add(CreateInteractivePill("50m (Deep)", delegate { _config.PomodoroWorkMinutes = 50; _engine.PomodoroWorkMinutes = 50; SaveConfiguration(); UpdateDisplay(); }));
+            pomoSetStack.Children.Add(workPills);
+
+            // Audio Chimes toggle row
+            Grid chimeRow = new Grid() { Margin = new Thickness(0, 2, 0, 8) };
+            chimeRow.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
+            chimeRow.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
+
+            TextBlock chimeLabel = new TextBlock()
+            {
+                Text = "Play acoustic chime when work/break completes",
+                FontSize = 10,
+                Foreground = _theme.TextSecondary,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(chimeLabel, 0);
+            chimeRow.Children.Add(chimeLabel);
+
+            Border chimeKnob;
+            Border chimeToggle = CreateSwitchToggle(_config.SoundChimesEnabled, out chimeKnob, delegate(bool state)
+            {
+                _config.SoundChimesEnabled = state;
+                _engine.SoundChimesEnabled = state;
+                SaveConfiguration();
+            });
+            Grid.SetColumn(chimeToggle, 1);
+            chimeRow.Children.Add(chimeToggle);
+            pomoSetStack.Children.Add(chimeRow);
+
+            // Test chime button
+            pomoSetStack.Children.Add(CreateInteractivePill("🔔 Preview Focus Chime", delegate
+            {
+                _engine.PlayChime(true);
+            }));
+
+            pomoSettingsTile.Child = pomoSetStack;
+            settingsPanel.Children.Add(pomoSettingsTile);
+
+            // 6. Data Management & Reset
             Border dataTile = new Border()
             {
                 Background = _theme.SurfaceCard,
@@ -2783,13 +3609,98 @@ namespace FocusPulse
                 _sprintProgressBar.Value = sprint.ProgressPercent;
                 _sprintSubStatusText.Text = string.Format("{0} • Distraction Alerts: {1}", sprint.SprintLabel, sprint.DistractionWarnings);
                 _miniSprintBadgeText.Text = string.Format("🍅 {0}", sprint.FormattedRemaining);
+
+                if (_pomodoroPlayPauseText != null)
+                {
+                    _pomodoroPlayPauseText.Text = sprint.IsPaused ? "▶ Resume" : "❚❚ Pause";
+                }
+
+                if (_pomodoroModeBadgeText != null && _pomodoroModeBadgeBorder != null)
+                {
+                    if (sprint.Mode == PomodoroMode.ShortBreak)
+                    {
+                        _pomodoroModeBadgeText.Text = "☕ SHORT BREAK";
+                        _pomodoroModeBadgeText.Foreground = _theme.AmberBadgeText;
+                        _pomodoroModeBadgeBorder.Background = _theme.AmberBadgeBg;
+                        _pomodoroModeBadgeBorder.BorderBrush = _theme.AmberBadgeText;
+                        if (_pomodoroSkipBreakBtn != null) _pomodoroSkipBreakBtn.Visibility = Visibility.Visible;
+                    }
+                    else if (sprint.Mode == PomodoroMode.LongBreak)
+                    {
+                        _pomodoroModeBadgeText.Text = "🌿 LONG BREAK";
+                        _pomodoroModeBadgeText.Foreground = _theme.FocusBadgeText;
+                        _pomodoroModeBadgeBorder.Background = _theme.FocusBadgeBg;
+                        _pomodoroModeBadgeBorder.BorderBrush = _theme.FocusBadgeBorder;
+                        if (_pomodoroSkipBreakBtn != null) _pomodoroSkipBreakBtn.Visibility = Visibility.Visible;
+                    }
+                    else
+                    {
+                        _pomodoroModeBadgeText.Text = "🎯 DEEP FOCUS";
+                        _pomodoroModeBadgeText.Foreground = _theme.BrandAccent;
+                        _pomodoroModeBadgeBorder.Background = _theme.SurfaceElevated;
+                        _pomodoroModeBadgeBorder.BorderBrush = _theme.BrandAccent;
+                        if (_pomodoroSkipBreakBtn != null) _pomodoroSkipBreakBtn.Visibility = Visibility.Collapsed;
+                    }
+                }
             }
             else
             {
-                _sprintCountdownText.Text = "25:00";
+                _sprintCountdownText.Text = string.Format("{0:D2}:00", _config.PomodoroWorkMinutes > 0 ? _config.PomodoroWorkMinutes : 25);
                 _sprintProgressBar.Value = 0;
                 _sprintSubStatusText.Text = "Ready for an uninterrupted sprint";
                 _miniSprintBadgeText.Text = "";
+
+                if (_pomodoroPlayPauseText != null) _pomodoroPlayPauseText.Text = "▶ Start";
+                if (_pomodoroSkipBreakBtn != null) _pomodoroSkipBreakBtn.Visibility = Visibility.Collapsed;
+                if (_pomodoroModeBadgeText != null && _pomodoroModeBadgeBorder != null)
+                {
+                    _pomodoroModeBadgeText.Text = "🎯 READY TO FOCUS";
+                    _pomodoroModeBadgeText.Foreground = _theme.TextMuted;
+                    _pomodoroModeBadgeBorder.Background = _theme.SurfaceElevated;
+                    _pomodoroModeBadgeBorder.BorderBrush = _theme.SubtleBorder;
+                }
+            }
+
+            // Update Target Task Banner
+            if (_pomodoroTargetTaskText != null)
+            {
+                if (!string.IsNullOrEmpty(sprint.LinkedTaskTitle))
+                {
+                    _pomodoroTargetTaskText.Text = string.Format("🎯 Target: {0}", sprint.LinkedTaskTitle);
+                    _pomodoroTargetTaskText.Foreground = _theme.BrandAccent;
+                    if (_pomodoroClearTargetBtn != null) _pomodoroClearTargetBtn.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    _pomodoroTargetTaskText.Text = "🎯 No task target linked • Click 🎯 on any task below";
+                    _pomodoroTargetTaskText.Foreground = _theme.TextMuted;
+                    if (_pomodoroClearTargetBtn != null) _pomodoroClearTargetBtn.Visibility = Visibility.Collapsed;
+                }
+            }
+
+            // Update 4-Cycle Dots
+            if (_pomodoroCycleDotsPanel != null)
+            {
+                _pomodoroCycleDotsPanel.Children.Clear();
+                int currentCycle = Math.Max(1, Math.Min(4, sprint.CurrentCycle));
+                for (int c = 1; c <= 4; c++)
+                {
+                    Border dot = new Border()
+                    {
+                        Width = 14,
+                        Height = 6,
+                        CornerRadius = new CornerRadius(3),
+                        Margin = new Thickness(0, 0, 4, 0),
+                        Background = (c <= currentCycle && sprint.IsActive) ? _theme.BrandAccent : _theme.SurfaceElevated,
+                        BorderBrush = (c == currentCycle) ? _theme.BrandAccent : _theme.SubtleBorder,
+                        BorderThickness = new Thickness(1)
+                    };
+                    _pomodoroCycleDotsPanel.Children.Add(dot);
+                }
+            }
+            if (_pomodoroCycleLabelText != null)
+            {
+                _pomodoroCycleLabelText.Text = string.Format("Cycle {0} of 4", sprint.CurrentCycle);
             }
 
             double targetSeconds = _engine.DailyGoalHours * 3600.0;
@@ -2857,10 +3768,11 @@ namespace FocusPulse
                 }
             }
 
-            // 6. Chronological Matrix
+            // 6. Chronological Matrix & Weekly Streak
             if (_currentTabIndex == 2)
             {
                 RenderChronologicalMatrix();
+                UpdateWeeklyMetricsDisplay();
             }
 
             // 7. System Tray Tooltip Synchronization
@@ -2874,6 +3786,82 @@ namespace FocusPulse
                     _notifyIcon.Text = trayTip;
                 }
                 catch { }
+            }
+        }
+
+        private void UpdateWeeklyMetricsDisplay()
+        {
+            if (_weeklyBarsGrid == null) return;
+            _weeklyBarsGrid.Children.Clear();
+            _weeklyBarsGrid.ColumnDefinitions.Clear();
+
+            List<WeeklyDayMetric> weekly = _engine.GetWeeklyMetrics(_engine.DailyGoalHours);
+            int streak = _engine.GetActiveStreakDays();
+
+            if (_weeklyStreakBadgeText != null)
+            {
+                _weeklyStreakBadgeText.Text = string.Format("🔥 {0} DAY STREAK", streak);
+            }
+
+            for (int i = 0; i < weekly.Count; i++)
+            {
+                _weeklyBarsGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
+                WeeklyDayMetric m = weekly[i];
+
+                StackPanel colStack = new StackPanel()
+                {
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Bottom
+                };
+
+                // Vertical Bar Container
+                Border barContainer = new Border()
+                {
+                    Width = 16,
+                    Height = 44,
+                    Background = _theme.SurfaceElevated,
+                    CornerRadius = new CornerRadius(3),
+                    Margin = new Thickness(0, 0, 0, 4),
+                    VerticalAlignment = VerticalAlignment.Bottom
+                };
+
+                // Fill indicator
+                double fillHeight = Math.Max(2, Math.Min(44, m.Ratio * 44.0));
+                Border barFill = new Border()
+                {
+                    Width = 16,
+                    Height = fillHeight,
+                    CornerRadius = new CornerRadius(3),
+                    Background = m.IsToday ? _theme.BrandAccent : (m.Ratio >= 1.0 ? _theme.FocusBadgeText : _theme.FocusBadgeBorder),
+                    VerticalAlignment = VerticalAlignment.Bottom
+                };
+                barContainer.Child = barFill;
+                colStack.Children.Add(barContainer);
+
+                // Day Label (e.g. Mon)
+                TextBlock dayTb = new TextBlock()
+                {
+                    Text = m.DayLabel,
+                    FontSize = 8,
+                    FontWeight = m.IsToday ? FontWeights.Bold : FontWeights.Normal,
+                    Foreground = m.IsToday ? _theme.BrandAccent : _theme.TextMuted,
+                    HorizontalAlignment = HorizontalAlignment.Center
+                };
+                colStack.Children.Add(dayTb);
+
+                // Hours Label (e.g. 3.5h)
+                TextBlock hrsTb = new TextBlock()
+                {
+                    Text = string.Format("{0:F1}h", m.FocusHours),
+                    FontSize = 7.5,
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = m.IsToday ? _theme.TextPrimary : _theme.TextSecondary,
+                    HorizontalAlignment = HorizontalAlignment.Center
+                };
+                colStack.Children.Add(hrsTb);
+
+                Grid.SetColumn(colStack, i);
+                _weeklyBarsGrid.Children.Add(colStack);
             }
         }
 
@@ -3317,6 +4305,10 @@ namespace FocusPulse
                 _config.AppCategoryFilter = _activeCategoryFilter;
                 _config.IsCompactAppsView = _config.IsCompactAppsView;
                 _config.AppSortOrder = _config.AppSortOrder;
+                _config.PomodoroWorkMinutes = _engine.PomodoroWorkMinutes;
+                _config.PomodoroBreakMinutes = _engine.PomodoroBreakMinutes;
+                _config.PomodoroLongBreakMinutes = _engine.PomodoroLongBreakMinutes;
+                _config.SoundChimesEnabled = _engine.SoundChimesEnabled;
 
                 string dir = System.IO.Path.GetDirectoryName(_configFilePath);
                 if (!Directory.Exists(dir))

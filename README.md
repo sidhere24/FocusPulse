@@ -16,9 +16,26 @@
 - **Dedicated Background Worker**: Tracking runs on an independent worker thread completely decoupled from the UI thread, ensuring continuous 24/7 accuracy even when the window is in the background or hidden in the system tray.
 - **Smart Focus Isolation**: The engine ignores its own process ID, so inspecting your dashboard, launching sprints, or tweaking settings never interrupts your real workflow.
 
-### 2. Deep Flow & Focus Intelligence
-- **🏆 Daily Focus Score (0–100%)**: Evaluates focus quality in real time based on deep work ratio and context-switching velocity (application switches per hour).
-- **🎯 Flow Sprints (Structured Intervals)**: 1-click **25m Focus Sprint** or **50m Deep Flow** sessions with live countdowns and **Distraction Defense** alerts.
+### 2. Deep Flow, Pomodoro Engine & Task Intelligence
+- **🍅 Complete Pomodoro Work / Break Interval Engine**:
+  - Full Pomodoro state machine: **Focus (25m / custom)** ➔ **Short Break (5m)** ➔ **Long Break (15m after 4 cycles)**.
+  - Visual 4-cycle micro-indicators (`[ ● ] [ ○ ] [ ○ ] [ ○ ]`) tracking consecutive deep work intervals.
+  - High-visibility digital countdown timer (`24:59`) with Play, Pause, Skip Break, and Reset controls.
+  - Linked Focus Target banner (`🎯 Target: <Task Name>`) connecting Pomodoro sprints directly to your actionable tasks.
+- **📝 Today's Priorities (Integrated Actionable Task Checklist)**:
+  - Quick-add focus tasks with priority tags: `🔴 High`, `🟡 Med`, and `🟢 Low`.
+  - Interactive checkboxes with smooth text strike-through animation and dimming.
+  - Pomodoro counter badge (`🍅 2`) incremented automatically upon sprint completion.
+  - 1-click **🎯 Focus** button linking any task to the active Pomodoro interval.
+  - Task progress bar and ratio summary (`2/3 Done (67%)`).
+- **🔔 Pleasant Acoustic Audio Chimes**:
+  - Ascending celebratory musical triad chime on focus completion (`C5-E5-G5-C6`).
+  - Gentle dual-prompt return-to-work tone on break completion (`G5-E5`).
+  - Non-blocking synthesized audio thread with zero latency and fallback support.
+- **🔥 7-Day Consistency & Active Streak Engine (Timeline Tab)**:
+  - Active Streak Flame badge (`🔥 4 DAY STREAK`) tracking daily focus discipline.
+  - 7 vertical day bars (Mon–Sun) with hours worked, today dynamically highlighted in your active `BrandAccent`.
+- **🏆 Daily Focus Flow Score (0–100%)**: Evaluates focus quality in real time based on deep work ratio and context-switching velocity (application switches per hour).
 - **📊 Automated Classification**: Automatically groups active applications and browser tabs into **Focus Work** (IDEs, VS Code, Terminal, GitHub, ChatGPT), **General**, and **Distraction** (Steam, Netflix, YouTube).
 - **🧘 Ergonomic Wellness Coach**: Tracks continuous screen time and prompts for a healthy 5-minute stretch when reaching 50 minutes of uninterrupted work.
 - **⏱ Chronological Work Matrix (8 AM – 8 PM)**: Visual hour-by-hour timeline displaying active duration and focused work density.
