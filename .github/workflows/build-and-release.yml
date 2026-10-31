@@ -1,0 +1,84 @@
+name: Build and Release FocusPulse
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Build Windows Standalone Executables (x64, x86, ARM64)
+        shell: powershell
+        run: |
+          .\build.ps1
+
+      - name: Upload Windows Binaries Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: focuspulse-windows
+          path: |
+            bin/FocusPulse-x64.exe
+            bin/FocusPulse-x86.exe
+            bin/FocusPulse-ARM64.exe
+            bin/FocusPulse.ico
+
+  build-crossplatform:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Validate Python Syntax
+        run: |
+          python3 -m py_compile crossplatform/focuspulse.py
+
+      - name: Package Linux & macOS Distribution
+        run: |
+          tar -czvf FocusPulse-Unix.tar.gz run.sh crossplatform/ README.md LICENSE
+
+      - name: Upload Unix Distribution Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: focuspulse-unix
+          path: FocusPulse-Unix.tar.gz
+
+  release:
+    needs: [build-windows, build-crossplatform]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Download Windows Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: focuspulse-windows
+          path: release-bin/
+
+      - name: Download Unix Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: focuspulse-unix
+          path: release-bin/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-bin/FocusPulse-x64.exe
+            release-bin/FocusPulse-x86.exe
+            release-bin/FocusPulse-ARM64.exe
+            release-bin/FocusPulse.ico
+            release-bin/FocusPulse-Unix.tar.gz
+          generate_release_notes: true

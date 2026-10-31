@@ -1,0 +1,31 @@
+{
+  "status": "Active (Local)",
+  "currentApp": {
+    "name": "Google Antigravity IDE",
+    "title": "FocusPulse Workspace",
+    "sessionTime": "00:24:18",
+    "state": "Focus Work"
+  },
+  "summary": {
+    "activeTime": "4h 12m",
+    "focusTime": "3h 45m",
+    "focusScore": 95
+  },
+  "topApps": [
+    {
+      "name": "Google Antigravity IDE",
+      "duration": "2h 45m",
+      "percent": 65
+    },
+    {
+      "name": "Visual Studio Code",
+      "duration": "1h 05m",
+      "percent": 26
+    },
+    {
+      "name": "Windows Terminal",
+      "duration": "22m",
+      "percent": 9
+    }
+  ]
+}

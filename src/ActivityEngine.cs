@@ -1,0 +1,799 @@
+using System;
+using System.IO;
+using System.Text;
+using System.Diagnostics;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using System.Web.Script.Serialization;
+
+namespace FocusPulse
+{
+    public class ActivityEngine
+    {
+        private static readonly Dictionary<string, string> KnownApplications = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            // Development & Creative Suites
+            { "antigravity.exe", "Google Antigravity IDE" },
+            { "Antigravity", "Google Antigravity IDE" },
+            { "Code.exe", "Visual Studio Code" },
+            { "cursor.exe", "Cursor AI Editor" },
+            { "windsurf.exe", "Windsurf IDE" },
+            { "devenv.exe", "Visual Studio" },
+            { "WindowsTerminal.exe", "Windows Terminal" },
+            { "powershell.exe", "PowerShell" },
+            { "cmd.exe", "Command Prompt" },
+            { "git-bash.exe", "Git Bash" },
+            { "pycharm64.exe", "PyCharm" },
+            { "idea64.exe", "IntelliJ IDEA" },
+            { "sublime_text.exe", "Sublime Text" },
+            { "notepad++.exe", "Notepad++" },
+            { "notepad.exe", "Notepad" },
+            { "figma.exe", "Figma" },
+            { "blender.exe", "Blender" },
+
+            // Web Browsers
+            { "chrome.exe", "Google Chrome" },
+            { "msedge.exe", "Microsoft Edge" },
+            { "firefox.exe", "Mozilla Firefox" },
+            { "brave.exe", "Brave Browser" },
+
+            // Collaboration & Knowledge
+            { "discord.exe", "Discord" },
+            { "slack.exe", "Slack" },
+            { "teams.exe", "Microsoft Teams" },
+            { "notion.exe", "Notion" },
+            { "obsidian.exe", "Obsidian" },
+            { "excel.exe", "Microsoft Excel" },
+            { "winword.exe", "Microsoft Word" },
+
+            // Media & Games
+            { "spotify.exe", "Spotify" },
+            { "steam.exe", "Steam" },
+            { "vlc.exe", "VLC Media Player" },
+
+            // Windows System Shell & Productivity
+            { "explorer.exe", "File Explorer" },
+            { "taskmgr.exe", "Task Manager" },
+            { "SystemSettings.exe", "Windows Settings" },
+            { "CalculatorApp.exe", "Calculator" },
+            { "SearchHost.exe", "Windows Search" },
+            { "ShellExperienceHost.exe", "Windows Shell" },
+            { "mstsc.exe", "Remote Desktop" },
+            { "SnippingTool.exe", "Snipping Tool" },
+            { "ScreenClippingHost.exe", "Snipping Tool" },
+            { "DesktopEditors.exe", "ONLYOFFICE Docs" },
+            { "LinkedIn.exe", "LinkedIn" },
+            { "WinStore.App.exe", "Microsoft Store" },
+            { "wt.exe", "Windows Terminal" },
+            { "WhatsApp.exe", "WhatsApp" },
+            { "zoom.exe", "Zoom Meetings" },
+            { "postman.exe", "Postman API" },
+            { "githubdesktop.exe", "GitHub Desktop" },
+            { "opencode.exe", "OpenCode Studio" },
+            { "Twitter.exe", "X / Twitter" },
+            { "X.exe", "X / Twitter" }
+        };
+
+        private static readonly Dictionary<string, string> CategoryCatalog = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "antigravity.exe", "Engineering" },
+            { "Antigravity", "Engineering" },
+            { "Code.exe", "Engineering" },
+            { "cursor.exe", "Engineering" },
+            { "windsurf.exe", "Engineering" },
+            { "devenv.exe", "Engineering" },
+            { "WindowsTerminal.exe", "Engineering" },
+            { "powershell.exe", "Engineering" },
+            { "cmd.exe", "Engineering" },
+            { "git-bash.exe", "Engineering" },
+            { "pycharm64.exe", "Engineering" },
+            { "idea64.exe", "Engineering" },
+            { "sublime_text.exe", "Engineering" },
+            { "notepad++.exe", "Engineering" },
+
+            { "chrome.exe", "Browsing" },
+            { "msedge.exe", "Browsing" },
+            { "firefox.exe", "Browsing" },
+            { "brave.exe", "Browsing" },
+
+            { "discord.exe", "Communication" },
+            { "slack.exe", "Communication" },
+            { "teams.exe", "Communication" },
+
+            { "spotify.exe", "Media" },
+            { "vlc.exe", "Media" },
+
+            { "notion.exe", "Productivity" },
+            { "obsidian.exe", "Productivity" },
+            { "notepad.exe", "Productivity" },
+            { "figma.exe", "Design" },
+            { "excel.exe", "Productivity" },
+            { "winword.exe", "Productivity" },
+
+            { "explorer.exe", "System" },
+            { "taskmgr.exe", "System" },
+            { "SystemSettings.exe", "System" },
+            { "SnippingTool.exe", "System" },
+            { "ScreenClippingHost.exe", "System" },
+            { "WinStore.App.exe", "System" },
+            { "DesktopEditors.exe", "Productivity" },
+            { "LinkedIn.exe", "Networking" },
+            { "wt.exe", "Engineering" },
+            { "opencode.exe", "Engineering" },
+            { "WhatsApp.exe", "Communication" },
+            { "zoom.exe", "Communication" },
+            { "postman.exe", "Engineering" },
+            { "githubdesktop.exe", "Engineering" },
+            { "Twitter.exe", "Distraction" },
+            { "X.exe", "Distraction" },
+            { "steam.exe", "Gaming" }
+        };
+
+        private readonly object _lock = new object();
+        private readonly uint _myPid;
+        private DaySummary _summary;
+        private ActiveWindowSnapshot _currentWindow;
+        private FlowSprintSession _flowSprint;
+        private WellnessCoach _wellnessCoach;
+        private int _idleTimeoutSeconds = 180;
+        private readonly string _storageFilePath;
+
+        public bool IsPaused { get; set; }
+        public bool IsPrivacyShield { get; set; }
+        public string ActiveProjectWorkspace { get; set; }
+        public double DailyGoalHours { get; set; }
+        public bool LastTickDistractionWarning { get; private set; }
+
+        public ActivityEngine(int idleTimeoutSeconds, double dailyGoalHours = 4.0, int breakMinutes = 50)
+        {
+            try
+            {
+                _myPid = (uint)Process.GetCurrentProcess().Id;
+            }
+            catch
+            {
+                _myPid = 0;
+            }
+
+            _idleTimeoutSeconds = idleTimeoutSeconds > 0 ? idleTimeoutSeconds : 180;
+            DailyGoalHours = dailyGoalHours > 0 ? dailyGoalHours : 4.0;
+            ActiveProjectWorkspace = "Development";
+            IsPaused = false;
+            IsPrivacyShield = false;
+
+            _currentWindow = new ActiveWindowSnapshot();
+            _flowSprint = new FlowSprintSession();
+            _wellnessCoach = new WellnessCoach();
+            _wellnessCoach.BreakAlertThresholdSeconds = (breakMinutes > 0 ? breakMinutes : 50) * 60;
+
+            string appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            string dir = Path.Combine(appData, "FocusPulse");
+            if (!Directory.Exists(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+            _storageFilePath = Path.Combine(dir, "day_metrics.json");
+
+            LoadMetrics();
+        }
+
+        public DaySummary Summary
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return _summary;
+                }
+            }
+        }
+
+        public ActiveWindowSnapshot CurrentWindow
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return _currentWindow;
+                }
+            }
+        }
+
+        public FlowSprintSession ActiveSprint
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return _flowSprint;
+                }
+            }
+        }
+
+        public WellnessCoach Coach
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return _wellnessCoach;
+                }
+            }
+        }
+
+        public void StartFlowSprint(int minutes, string label)
+        {
+            lock (_lock)
+            {
+                _flowSprint.IsActive = true;
+                _flowSprint.TotalDurationSeconds = minutes * 60;
+                _flowSprint.RemainingSeconds = _flowSprint.TotalDurationSeconds;
+                _flowSprint.DistractionWarnings = 0;
+                _flowSprint.SprintLabel = label;
+            }
+        }
+
+        public void StopFlowSprint()
+        {
+            lock (_lock)
+            {
+                _flowSprint.IsActive = false;
+            }
+        }
+
+        public void DismissBreakPrompt()
+        {
+            lock (_lock)
+            {
+                _wellnessCoach.IsDismissed = true;
+                _wellnessCoach.IsBreakRecommended = false;
+            }
+        }
+
+        public void SnoozeBreakPrompt(int minutes)
+        {
+            lock (_lock)
+            {
+                _wellnessCoach.ContinuousScreenSeconds = Math.Max(0, _wellnessCoach.BreakAlertThresholdSeconds - (minutes * 60));
+                _wellnessCoach.IsBreakRecommended = false;
+                _wellnessCoach.IsDismissed = false;
+            }
+        }
+
+        public void Tick()
+        {
+            if (IsPaused) return;
+
+            // 1. Inactivity tracking via Win32 hardware input timer
+            NativeMethods.LASTINPUTINFO lii = new NativeMethods.LASTINPUTINFO();
+            lii.cbSize = (uint)Marshal.SizeOf(lii);
+            uint idleMs = 0;
+            if (NativeMethods.GetLastInputInfo(ref lii))
+            {
+                idleMs = (uint)Environment.TickCount - lii.dwTime;
+            }
+            double idleSec = idleMs / 1000.0;
+            bool isIdle = idleSec >= _idleTimeoutSeconds;
+
+            // 2. Foreground application acquisition
+            IntPtr hwnd = NativeMethods.GetForegroundWindow();
+            string appExe = null;
+            string title = null;
+
+            if (hwnd != IntPtr.Zero)
+            {
+                uint pid = 0;
+                NativeMethods.GetWindowThreadProcessId(hwnd, out pid);
+
+                // Ignore FocusPulse self-window so inspecting stats never hijacks the session!
+                if (pid != 0 && pid == _myPid)
+                {
+                    lock (_lock)
+                    {
+                        appExe = _currentWindow.AppName;
+                        title = _currentWindow.WindowTitle;
+                    }
+                }
+                else if (pid != 0)
+                {
+                    string resolved = QueryProcessBinary(pid);
+                    if (!string.IsNullOrEmpty(resolved) && 
+                        (resolved.IndexOf("FocusPulse", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         resolved.IndexOf("ActivityWatch", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         resolved.IndexOf("Widget", StringComparison.OrdinalIgnoreCase) >= 0))
+                    {
+                        lock (_lock)
+                        {
+                            appExe = _currentWindow.AppName;
+                            title = _currentWindow.WindowTitle;
+                        }
+                    }
+                    else if (!string.IsNullOrEmpty(resolved))
+                    {
+                        if (string.Equals(resolved, "ApplicationFrameHost.exe", StringComparison.OrdinalIgnoreCase))
+                        {
+                            uint uwpPid = FindUwpChildPid(hwnd, pid);
+                            if (uwpPid != 0 && uwpPid != pid && uwpPid != _myPid)
+                            {
+                                string uwpName = QueryProcessBinary(uwpPid);
+                                if (!string.IsNullOrEmpty(uwpName))
+                                {
+                                    appExe = uwpName;
+                                }
+                            }
+                            if (string.IsNullOrEmpty(appExe))
+                            {
+                                appExe = resolved;
+                            }
+                        }
+                        else
+                        {
+                            appExe = resolved;
+                        }
+
+                        StringBuilder sbTitle = new StringBuilder(512);
+                        NativeMethods.GetWindowText(hwnd, sbTitle, 512);
+                        title = sbTitle.ToString().Trim();
+                    }
+                }
+            }
+
+            // Fallback for transient window switches
+            lock (_lock)
+            {
+                if (string.IsNullOrEmpty(appExe))
+                {
+                    if (!string.IsNullOrEmpty(_currentWindow.AppName) && !_currentWindow.AppName.Equals("Desktop", StringComparison.OrdinalIgnoreCase))
+                    {
+                        appExe = _currentWindow.AppName;
+                        title = _currentWindow.WindowTitle;
+                    }
+                    else
+                    {
+                        appExe = "Desktop";
+                    }
+                }
+            }
+
+            // Privacy shield masking
+            if (IsPrivacyShield)
+            {
+                title = "Private Workspace";
+            }
+            else if (string.IsNullOrEmpty(title))
+            {
+                title = ResolveFriendlyTitle(appExe);
+            }
+
+            ProductivityClass prod = DetermineProductivity(appExe, title);
+
+            lock (_lock)
+            {
+                string today = DateTime.Today.ToString("yyyy-MM-dd");
+                if (_summary.Date != today)
+                {
+                    _summary = new DaySummary();
+                }
+
+                _currentWindow.IsIdle = isIdle;
+                _currentWindow.IdleSeconds = idleSec;
+                _currentWindow.Productivity = prod;
+
+                int hour = DateTime.Now.Hour;
+
+                if (isIdle)
+                {
+                    _summary.TotalIdleSeconds += 1.0;
+
+                    if (idleSec >= 120)
+                    {
+                        _wellnessCoach.ContinuousScreenSeconds = 0;
+                        _wellnessCoach.IsBreakRecommended = false;
+                        _wellnessCoach.IsDismissed = false;
+                    }
+                }
+                else
+                {
+                    _summary.TotalActiveSeconds += 1.0;
+                    _summary.HourlyActiveSeconds[hour] += 1.0;
+
+                    if (prod == ProductivityClass.FocusWork)
+                    {
+                        _summary.FocusWorkSeconds += 1.0;
+                        _summary.HourlyFocusSeconds[hour] += 1.0;
+                    }
+                    else if (prod == ProductivityClass.Distraction)
+                    {
+                        _summary.DistractionSeconds += 1.0;
+                    }
+                    else
+                    {
+                        _summary.GeneralSeconds += 1.0;
+                    }
+
+                    // Workspace Project Accumulation
+                    string proj = string.IsNullOrEmpty(ActiveProjectWorkspace) ? "Development" : ActiveProjectWorkspace;
+                    double curProjSec = 0;
+                    if (_summary.ProjectDurations.TryGetValue(proj, out curProjSec))
+                    {
+                        _summary.ProjectDurations[proj] = curProjSec + 1.0;
+                    }
+                    else
+                    {
+                        _summary.ProjectDurations[proj] = 1.0;
+                    }
+
+                    // Ergonomic Continuous Screen Coach
+                    _wellnessCoach.ContinuousScreenSeconds += 1.0;
+                    if (_wellnessCoach.ContinuousScreenSeconds >= _wellnessCoach.BreakAlertThresholdSeconds && !_wellnessCoach.IsDismissed)
+                    {
+                        _wellnessCoach.IsBreakRecommended = true;
+                    }
+
+                    // Application Metrics (Ignore FocusPulse and widget itself)
+                    if (appExe.IndexOf("FocusPulse", StringComparison.OrdinalIgnoreCase) < 0 &&
+                        appExe.IndexOf("ActivityWatch", StringComparison.OrdinalIgnoreCase) < 0 &&
+                        appExe.IndexOf("Widget", StringComparison.OrdinalIgnoreCase) < 0)
+                    {
+                        double curSec = 0;
+                        if (_summary.AppDurations.TryGetValue(appExe, out curSec))
+                        {
+                            _summary.AppDurations[appExe] = curSec + 1.0;
+                        }
+                        else
+                        {
+                            _summary.AppDurations[appExe] = 1.0;
+                        }
+                    }
+
+                    // Session Switch Logic
+                    if (!string.Equals(_currentWindow.AppName, appExe, StringComparison.OrdinalIgnoreCase) ||
+                        !string.Equals(_currentWindow.WindowTitle, title, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _summary.WindowSwitches++;
+                        _currentWindow.AppName = appExe;
+                        _currentWindow.FriendlyName = ResolveFriendlyTitle(appExe);
+                        _currentWindow.WindowTitle = title;
+                        _currentWindow.StartTime = DateTime.Now;
+                        _currentWindow.ElapsedSeconds = 1;
+                    }
+                    else
+                    {
+                        _currentWindow.ElapsedSeconds += 1.0;
+                    }
+
+                    // Flow Sprint Countdown & Distraction Defense
+                    LastTickDistractionWarning = false;
+                    if (_flowSprint.IsActive)
+                    {
+                        _flowSprint.RemainingSeconds--;
+
+                        if (prod == ProductivityClass.Distraction)
+                        {
+                            _flowSprint.DistractionWarnings++;
+                            LastTickDistractionWarning = true;
+                        }
+
+                        if (_flowSprint.RemainingSeconds <= 0)
+                        {
+                            _flowSprint.IsActive = false;
+                            try
+                            {
+                                System.Media.SystemSounds.Asterisk.Play();
+                            }
+                            catch { }
+                        }
+                    }
+                }
+            }
+        }
+
+        public static ProductivityClass DetermineProductivity(string appExe, string windowTitle)
+        {
+            string lowerExe = (appExe ?? "").ToLower();
+            string lowerTitle = (windowTitle ?? "").ToLower();
+
+            // Antigravity & AI Developer Tools
+            if (lowerExe.Contains("antigravity") || lowerTitle.Contains("antigravity"))
+            {
+                return ProductivityClass.FocusWork;
+            }
+
+            // Distracting Applications & Games
+            if (lowerExe == "steam.exe" || lowerExe == "netflix.exe" || lowerExe == "spotify.exe" ||
+                lowerExe == "vlc.exe" || lowerExe.Contains("game") || lowerExe == "epicgameslauncher.exe")
+            {
+                return ProductivityClass.Distraction;
+            }
+
+            // Browsers (Context-aware based on active tab title)
+            if (lowerExe == "chrome.exe" || lowerExe == "msedge.exe" || lowerExe == "firefox.exe" || lowerExe == "brave.exe")
+            {
+                if (lowerTitle.Contains("youtube") || lowerTitle.Contains("reddit") || lowerTitle.Contains("twitter") ||
+                    lowerTitle.Contains("x.com") || lowerTitle.Contains("twitch") || lowerTitle.Contains("tiktok") ||
+                    lowerTitle.Contains("facebook") || lowerTitle.Contains("instagram") || lowerTitle.Contains("netflix"))
+                {
+                    return ProductivityClass.Distraction;
+                }
+
+                if (lowerTitle.Contains("github") || lowerTitle.Contains("stackoverflow") || lowerTitle.Contains("stack overflow") ||
+                    lowerTitle.Contains("docs") || lowerTitle.Contains("chatgpt") || lowerTitle.Contains("claude") ||
+                    lowerTitle.Contains("gemini") || lowerTitle.Contains("azure") || lowerTitle.Contains("aws") ||
+                    lowerTitle.Contains("google cloud") || lowerTitle.Contains("jira") || lowerTitle.Contains("confluence") ||
+                    lowerTitle.Contains("notion") || lowerTitle.Contains("pull request") || lowerTitle.Contains("gitlab") ||
+                    lowerTitle.Contains("antigravity") || lowerTitle.Contains("deepmind"))
+                {
+                    return ProductivityClass.FocusWork;
+                }
+
+                return ProductivityClass.General;
+            }
+
+            // Core Engineering & Deep Focus Tools
+            if (lowerExe == "code.exe" || lowerExe == "devenv.exe" || lowerExe == "windowsterminal.exe" ||
+                lowerExe == "wt.exe" || lowerExe == "powershell.exe" || lowerExe == "cmd.exe" || lowerExe == "git-bash.exe" ||
+                lowerExe == "opencode.exe" || lowerExe == "pycharm64.exe" || lowerExe == "idea64.exe" || lowerExe == "sublime_text.exe" ||
+                lowerExe == "notepad++.exe" || lowerExe == "notepad.exe" || lowerExe == "notion.exe" ||
+                lowerExe == "obsidian.exe" || lowerExe == "figma.exe" || lowerExe == "excel.exe" ||
+                lowerExe == "winword.exe" || lowerExe == "blender.exe" || lowerExe == "cursor.exe" ||
+                lowerExe == "windsurf.exe" || lowerExe == "zed.exe" || lowerExe == "desktopeditors.exe" ||
+                lowerExe == "postman.exe" || lowerExe == "githubdesktop.exe")
+            {
+                return ProductivityClass.FocusWork;
+            }
+
+            return ProductivityClass.General;
+        }
+
+        private static string QueryProcessBinary(uint pid)
+        {
+            IntPtr hProc = NativeMethods.OpenProcess(NativeMethods.PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+            if (hProc == IntPtr.Zero) return null;
+
+            try
+            {
+                StringBuilder sb = new StringBuilder(1024);
+                int size = sb.Capacity;
+                if (NativeMethods.QueryFullProcessImageName(hProc, 0, sb, ref size))
+                {
+                    return Path.GetFileName(sb.ToString());
+                }
+            }
+            finally
+            {
+                NativeMethods.CloseHandle(hProc);
+            }
+            return null;
+        }
+
+        private static uint FindUwpChildPid(IntPtr parentHwnd, uint parentPid)
+        {
+            uint childPidFound = 0;
+            NativeMethods.EnumChildWindows(parentHwnd, delegate(IntPtr childHwnd, IntPtr lParam)
+            {
+                uint cPid = 0;
+                NativeMethods.GetWindowThreadProcessId(childHwnd, out cPid);
+                if (cPid != 0 && cPid != parentPid)
+                {
+                    childPidFound = cPid;
+                    return false;
+                }
+                return true;
+            }, IntPtr.Zero);
+            return childPidFound;
+        }
+
+        public static string ResolveFriendlyTitle(string appExe)
+        {
+            if (string.IsNullOrEmpty(appExe)) return "Unknown";
+            string friendly;
+            if (KnownApplications.TryGetValue(appExe, out friendly))
+            {
+                return friendly;
+            }
+
+            if (appExe.IndexOf("antigravity", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "Google Antigravity IDE";
+            }
+            if (appExe.IndexOf("FocusPulse", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "FocusPulse HUD";
+            }
+
+            string clean = appExe;
+            if (clean.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            {
+                clean = clean.Substring(0, clean.Length - 4);
+            }
+            if (clean.Length > 0)
+            {
+                return char.ToUpper(clean[0]) + clean.Substring(1);
+            }
+            return clean;
+        }
+
+        public static string ResolveCategory(string appExe)
+        {
+            if (string.IsNullOrEmpty(appExe)) return "General";
+            string cat;
+            if (CategoryCatalog.TryGetValue(appExe, out cat))
+            {
+                return cat;
+            }
+            if (appExe.IndexOf("antigravity", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "Engineering";
+            }
+            return "General";
+        }
+
+        public List<AppSessionRecord> GetTopApplications(int count = 100, string categoryFilter = "All", string searchFilter = "", string sortOrder = "Duration")
+        {
+            lock (_lock)
+            {
+                List<AppSessionRecord> list = new List<AppSessionRecord>();
+                double total = _summary.TotalActiveSeconds;
+                if (total <= 0) total = 1.0;
+
+                int colorIdx = 0;
+                foreach (KeyValuePair<string, double> kvp in _summary.AppDurations)
+                {
+                    if (kvp.Key.IndexOf("FocusPulse", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        kvp.Key.IndexOf("ActivityWatch", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        kvp.Key.IndexOf("Widget", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        continue;
+                    }
+
+                    string friendly = ResolveFriendlyTitle(kvp.Key);
+                    string cat = ResolveCategory(kvp.Key);
+                    ProductivityClass prod = DetermineProductivity(kvp.Key, "");
+
+                    if (!string.IsNullOrEmpty(categoryFilter) && !categoryFilter.Equals("All", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (categoryFilter.Equals("Focus", StringComparison.OrdinalIgnoreCase) && prod != ProductivityClass.FocusWork)
+                            continue;
+                        if (categoryFilter.Equals("General", StringComparison.OrdinalIgnoreCase) && prod != ProductivityClass.General)
+                            continue;
+                        if (categoryFilter.Equals("Distraction", StringComparison.OrdinalIgnoreCase) && prod != ProductivityClass.Distraction)
+                            continue;
+                        if (categoryFilter.Equals("Browsing", StringComparison.OrdinalIgnoreCase) && !cat.Equals("Browsing", StringComparison.OrdinalIgnoreCase))
+                            continue;
+                        if (categoryFilter.Equals("Engineering", StringComparison.OrdinalIgnoreCase) && !cat.Equals("Engineering", StringComparison.OrdinalIgnoreCase))
+                            continue;
+                        if (categoryFilter.Equals("Office", StringComparison.OrdinalIgnoreCase) && !cat.Equals("Productivity", StringComparison.OrdinalIgnoreCase) && !cat.Equals("Office", StringComparison.OrdinalIgnoreCase))
+                            continue;
+                        if (categoryFilter.Equals("System", StringComparison.OrdinalIgnoreCase) && !cat.Equals("System", StringComparison.OrdinalIgnoreCase))
+                            continue;
+                    }
+
+                    if (!string.IsNullOrEmpty(searchFilter))
+                    {
+                        if (friendly.IndexOf(searchFilter, StringComparison.OrdinalIgnoreCase) < 0 &&
+                            kvp.Key.IndexOf(searchFilter, StringComparison.OrdinalIgnoreCase) < 0 &&
+                            cat.IndexOf(searchFilter, StringComparison.OrdinalIgnoreCase) < 0)
+                        {
+                            continue;
+                        }
+                    }
+
+                    AppSessionRecord rec = new AppSessionRecord();
+                    rec.AppName = kvp.Key;
+                    rec.FriendlyName = friendly;
+                    rec.Category = cat;
+                    rec.Productivity = prod;
+                    rec.DurationSeconds = kvp.Value;
+                    rec.PercentOfTotal = Math.Min(100.0, (kvp.Value / total) * 100.0);
+                    rec.ColorHex = FocusPulseStyles.GetSwatch(colorIdx++);
+                    rec.IconGlyph = FocusPulseStyles.GetAppGlyph(friendly);
+                    list.Add(rec);
+                }
+
+                if (string.Equals(sortOrder, "Name", StringComparison.OrdinalIgnoreCase))
+                {
+                    list.Sort(delegate(AppSessionRecord a, AppSessionRecord b)
+                    {
+                        return string.Compare(a.FriendlyName, b.FriendlyName, StringComparison.OrdinalIgnoreCase);
+                    });
+                }
+                else
+                {
+                    list.Sort(delegate(AppSessionRecord a, AppSessionRecord b)
+                    {
+                        return b.DurationSeconds.CompareTo(a.DurationSeconds);
+                    });
+                }
+
+                for (int i = 0; i < list.Count; i++)
+                {
+                    list[i].Rank = i + 1;
+                }
+
+                if (count > 0 && list.Count > count)
+                {
+                    return list.GetRange(0, count);
+                }
+                return list;
+            }
+        }
+
+        public void SaveMetrics()
+        {
+            try
+            {
+                lock (_lock)
+                {
+                    JavaScriptSerializer ser = new JavaScriptSerializer();
+                    string json = ser.Serialize(_summary);
+                    File.WriteAllText(_storageFilePath, json);
+                }
+            }
+            catch { }
+        }
+
+        public void ResetMetrics()
+        {
+            lock (_lock)
+            {
+                _summary = new DaySummary();
+                _currentWindow = new ActiveWindowSnapshot();
+                _wellnessCoach = new WellnessCoach();
+                _flowSprint = new FlowSprintSession();
+                SaveMetrics();
+            }
+        }
+
+        private void LoadMetrics()
+        {
+            try
+            {
+                if (File.Exists(_storageFilePath))
+                {
+                    string json = File.ReadAllText(_storageFilePath);
+                    JavaScriptSerializer ser = new JavaScriptSerializer();
+                    Dictionary<string, object> dict = ser.Deserialize<Dictionary<string, object>>(json);
+                    if (dict != null)
+                    {
+                        string savedDate = dict.ContainsKey("Date") ? Convert.ToString(dict["Date"]) : "";
+                        if (savedDate == DateTime.Today.ToString("yyyy-MM-dd"))
+                        {
+                            _summary = new DaySummary();
+                            _summary.Date = savedDate;
+                            if (dict.ContainsKey("TotalActiveSeconds"))
+                                _summary.TotalActiveSeconds = Convert.ToDouble(dict["TotalActiveSeconds"]);
+                            if (dict.ContainsKey("TotalIdleSeconds"))
+                                _summary.TotalIdleSeconds = Convert.ToDouble(dict["TotalIdleSeconds"]);
+                            if (dict.ContainsKey("FocusWorkSeconds"))
+                                _summary.FocusWorkSeconds = Convert.ToDouble(dict["FocusWorkSeconds"]);
+                            if (dict.ContainsKey("GeneralSeconds"))
+                                _summary.GeneralSeconds = Convert.ToDouble(dict["GeneralSeconds"]);
+                            if (dict.ContainsKey("DistractionSeconds"))
+                                _summary.DistractionSeconds = Convert.ToDouble(dict["DistractionSeconds"]);
+                            if (dict.ContainsKey("WindowSwitches"))
+                                _summary.WindowSwitches = Convert.ToInt32(dict["WindowSwitches"]);
+                            if (dict.ContainsKey("AppDurations") && dict["AppDurations"] is Dictionary<string, object>)
+                            {
+                                Dictionary<string, object> appDict = (Dictionary<string, object>)dict["AppDurations"];
+                                foreach (KeyValuePair<string, object> kvp in appDict)
+                                {
+                                    if (kvp.Key.IndexOf("FocusPulse", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                        kvp.Key.IndexOf("ActivityWatch", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                        kvp.Key.IndexOf("Widget", StringComparison.OrdinalIgnoreCase) >= 0)
+                                    {
+                                        continue;
+                                    }
+                                    _summary.AppDurations[kvp.Key] = Convert.ToDouble(kvp.Value);
+                                }
+                            }
+                            return;
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            _summary = new DaySummary();
+        }
+    }
+}

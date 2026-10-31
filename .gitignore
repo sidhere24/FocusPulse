@@ -1,0 +1,28 @@
+# Binaries: Track official compiled releases, ignore temp files
+*.tmp
+*.log
+*.suo
+*.user
+crash.log
+startup.log
+dispatcher_crash.log
+pulse_config.json
+day_metrics.json
+
+# Visual Studio / IDE
+.vs/
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+
+# OS Specific
+Thumbs.db
+Desktop.ini
+.DS_Store
