@@ -1839,6 +1839,30 @@ namespace FocusPulse
             taskbarSwitchRow.Children.Add(_toggleTaskbarSwitch);
             placeStack.Children.Add(taskbarSwitchRow);
 
+            // Launch on Windows Startup switch row
+            Grid startupSwitchRow = new Grid() { Margin = new Thickness(0, 0, 0, 8) };
+            startupSwitchRow.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
+            startupSwitchRow.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
+
+            TextBlock startupLabel = new TextBlock()
+            {
+                Text = "Launch automatically on Windows startup",
+                FontSize = 10,
+                Foreground = _theme.TextSecondary,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(startupLabel, 0);
+            startupSwitchRow.Children.Add(startupLabel);
+
+            Border toggleStartupKnob;
+            Border toggleStartupSwitch = CreateSwitchToggle(IsWindowsStartupEnabled(), out toggleStartupKnob, delegate(bool state)
+            {
+                SetWindowsStartup(state);
+            });
+            Grid.SetColumn(toggleStartupSwitch, 1);
+            startupSwitchRow.Children.Add(toggleStartupSwitch);
+            placeStack.Children.Add(startupSwitchRow);
+
             // Mode action pills
             StackPanel modeButtons = new StackPanel() { Orientation = Orientation.Horizontal };
             modeButtons.Children.Add(CreateInteractivePill("📌 Pin on Top", delegate { SetAlwaysOnTopState(true); }));
@@ -2409,6 +2433,44 @@ namespace FocusPulse
             _config.AccentPalette = _theme.PaletteKey;
             RebuildUserInterface();
             SaveConfiguration();
+        }
+
+        private bool IsWindowsStartupEnabled()
+        {
+            try
+            {
+                using (Microsoft.Win32.RegistryKey key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", false))
+                {
+                    return key != null && key.GetValue("FocusPulse") != null;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void SetWindowsStartup(bool enable)
+        {
+            try
+            {
+                using (Microsoft.Win32.RegistryKey key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true))
+                {
+                    if (key != null)
+                    {
+                        if (enable)
+                        {
+                            string exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
+                            key.SetValue("FocusPulse", "\"" + exePath + "\"");
+                        }
+                        else
+                        {
+                            key.DeleteValue("FocusPulse", false);
+                        }
+                    }
+                }
+            }
+            catch { }
         }
 
         private void CycleWorkspace()
